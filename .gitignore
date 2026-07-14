@@ -1,0 +1,43 @@
+# ---- Java / Maven ----
+target/
+*.class
+*.jar
+*.war
+*.ear
+build/
+
+# ---- Maven wrapper (keep mvnw scripts, ignore downloaded dist) ----
+.mvn/wrapper/maven-wrapper.jar
+
+# ---- IDE ----
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+
+# ---- Logs & temp ----
+*.log
+*.tmp
+*.bak
+logs/
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Env / secrets ----
+.env
+.env.local
+*.pem
+application-local.properties
+application-local.yml
+
+# ---- Node (frontend, ileride eklenirse) ----
+node_modules/
+dist/

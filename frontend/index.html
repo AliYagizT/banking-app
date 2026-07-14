@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    color-scheme:light;
+    --bg:#eef1f5; --surface:#ffffff; --surface-2:#f2f5f8; --surface-3:#e8edf2;
+    --border:#e0e5ec; --border-strong:#cdd5df;
+    --text:#0f1720; --text-2:#54616f; --text-3:#8a95a3;
+    --accent:oklch(0.52 0.11 250); --accent-press:oklch(0.46 0.11 250); --on-accent:#ffffff;
+    --accent-weak:oklch(0.95 0.028 250); --accent-ink:oklch(0.44 0.11 250);
+    --pos:oklch(0.52 0.12 152); --pos-weak:oklch(0.95 0.04 152);
+    --neg:oklch(0.53 0.17 27); --neg-weak:oklch(0.955 0.04 27);
+    --warn:oklch(0.62 0.13 68); --warn-weak:oklch(0.95 0.05 68);
+    --ring:oklch(0.55 0.15 250);
+    --radius:18px; --radius-sm:12px;
+    --shadow:0 1px 2px rgba(15,23,32,.04), 0 10px 26px -14px rgba(15,23,32,.22);
+    --shadow-lg:0 28px 64px -24px rgba(15,23,32,.4);
+    --sans:'Public Sans',system-ui,-apple-system,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace;
+  }
+  [data-theme="dark"]{
+    color-scheme:dark;
+    --bg:#0a0e13; --surface:#141a21; --surface-2:#1a222b; --surface-3:#222d38;
+    --border:#242f3b; --border-strong:#33404e;
+    --text:#eef3f8; --text-2:#9fadbc; --text-3:#68757f;
+    --accent:oklch(0.72 0.12 250); --accent-press:oklch(0.66 0.12 250); --on-accent:#06121f;
+    --accent-weak:oklch(0.30 0.055 250); --accent-ink:oklch(0.84 0.1 250);
+    --pos:oklch(0.74 0.13 152); --pos-weak:oklch(0.32 0.06 152);
+    --neg:oklch(0.68 0.16 27); --neg-weak:oklch(0.33 0.08 27);
+    --warn:oklch(0.76 0.13 68); --warn-weak:oklch(0.34 0.07 68);
+    --ring:oklch(0.72 0.13 250);
+    --shadow:0 1px 2px rgba(0,0,0,.35), 0 14px 34px -16px rgba(0,0,0,.62);
+    --shadow-lg:0 34px 74px -24px rgba(0,0,0,.78);
+  }
+  *{box-sizing:border-box;}
+  button{font-family:inherit;margin:0;}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  input,select,textarea{font-family:inherit;}
+  a{color:var(--accent-ink);text-underline-offset:2px;}
+  a:hover{color:var(--accent-press);}
+  :focus-visible{outline:2px solid var(--ring);outline-offset:2px;border-radius:6px;}
+  ::selection{background:var(--accent-weak);}
+  @keyframes lg-spin{to{transform:rotate(360deg)}}
+  @keyframes lg-pulse{0%,100%{opacity:.55}50%{opacity:.25}}
+  @keyframes lg-in{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
+  @keyframes lg-toast{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+</style>
+</helmet>
+
+<div data-theme="{{ theme }}" style="min-height:100vh;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;">
+
+  <!-- ================= TOP BAR ================= -->
+  <header style="position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:16px;height:64px;padding:0 clamp(16px,4vw,40px);background:color-mix(in srgb, var(--bg) 86%, transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:11px;">
+      <div aria-hidden="true" style="width:30px;height:30px;border-radius:9px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-weight:800;font-size:16px;">L</div>
+      <span style="font-weight:800;font-size:18px;letter-spacing:-.01em;">{{ brand }}</span>
+    </div>
+    <div style="flex:1;"></div>
+
+    <div role="group" aria-label="Theme" style="display:flex;padding:3px;gap:2px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;">
+      <button type="button" aria-pressed="{{ isLight }}" onClick="{{ setLight }}" style="{{ lightTabStyle }}">Light</button>
+      <button type="button" aria-pressed="{{ isDark }}" onClick="{{ setDark }}" style="{{ darkTabStyle }}">Dark</button>
+    </div>
+    <button type="button" onClick="{{ openSettings }}" aria-label="Connection settings" style="height:36px;padding:0 13px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text-2);font-weight:600;font-size:13.5px;cursor:pointer;">Connection</button>
+
+    <sc-if value="{{ isAuthed }}">
+      <div style="display:flex;align-items:center;gap:12px;padding-left:4px;">
+        <div style="text-align:right;line-height:1.25;">
+          <div style="font-weight:700;font-size:13.5px;">{{ customerName }}</div>
+          <div style="font-size:11.5px;color:var(--text-3);letter-spacing:.02em;">{{ roleLabel }}</div>
+        </div>
+        <button type="button" onClick="{{ logout }}" style="height:36px;padding:0 14px;border:1px solid var(--border-strong);border-radius:10px;background:var(--surface);color:var(--text);font-weight:600;font-size:13.5px;cursor:pointer;">Sign out</button>
+      </div>
+    </sc-if>
+  </header>
+
+  <!-- ================= LOADING BOOT ================= -->
+  <sc-if value="{{ booting }}" hint-placeholder-val="{{ true }}">
+    <div style="display:grid;place-items:center;min-height:60vh;color:var(--text-3);">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+        <div style="width:26px;height:26px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:lg-spin .7s linear infinite;"></div>
+        <span style="font-size:13.5px;">Starting {{ brand }}…</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ================= AUTH ================= -->
+  <sc-if value="{{ isAuth }}">
+    <main style="display:grid;place-items:center;padding:clamp(24px,6vh,72px) 20px;">
+      <div style="width:100%;max-width:420px;">
+        <div style="text-align:center;margin-bottom:26px;">
+          <h1 style="font-size:26px;font-weight:800;letter-spacing:-.02em;margin:0 0 6px;">{{ authHeading }}</h1>
+          <p style="margin:0;color:var(--text-2);font-size:14.5px;">{{ authSub }}</p>
+        </div>
+
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:24px;">
+          <form onSubmit="{{ submitAuth }}" novalidate="true" style="display:flex;flex-direction:column;gap:16px;">
+            <sc-if value="{{ isRegister }}">
+              <div>
+                <label for="f-name" style="display:block;font-weight:600;font-size:13px;color:var(--text-2);margin-bottom:7px;">Full name</label>
+                <input id="f-name" name="fullName" type="text" autocomplete="name" value="{{ authFullName }}" onInput="{{ onAuthField }}" placeholder="Alex Rivera" style="width:100%;height:46px;padding:0 14px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);color:var(--text);font-size:15px;" />
+              </div>
+            </sc-if>
+            <div>
+              <label for="f-email" style="display:block;font-weight:600;font-size:13px;color:var(--text-2);margin-bottom:7px;">Email</label>
+              <input id="f-email" name="email" type="email" autocomplete="email" value="{{ authEmail }}" onInput="{{ onAuthField }}" placeholder="you@example.com" style="width:100%;height:46px;padding:0 14px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);color:var(--text);font-size:15px;" />
+            </div>
+            <div>
+              <label for="f-pass" style="display:block;font-weight:600;font-size:13px;color:var(--text-2);margin-bottom:7px;">Password</label>
+              <input id="f-pass" name="password" type="password" autocomplete="{{ passwordAutocomplete }}" value="{{ authPassword }}" onInput="{{ onAuthField }}" placeholder="••••••••" style="width:100%;height:46px;padding:0 14px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);color:var(--text);font-size:15px;" />
+              <sc-if value="{{ showPwMeter }}">
+                <div style="margin-top:10px;">
+                  <div style="height:5px;border-radius:99px;background:var(--surface-3);overflow:hidden;">
+                    <div style="{{ pwBarStyle }}"></div>
+                  </div>
+                  <div style="margin-top:6px;font-size:12px;color:var(--text-3);">Strength: <span style="{{ pwLabelStyle }}">{{ pwLabel }}</span> · use 8+ characters with a letter and a number</div>
+                </div>
+              </sc-if>
+            </div>
+
+            <sc-if value="{{ authError }}">
+              <div role="alert" style="display:flex;gap:10px;padding:12px 14px;border-radius:12px;background:var(--neg-weak);border:1px solid color-mix(in srgb,var(--neg) 30%,transparent);color:var(--neg);font-size:13.5px;font-weight:500;">
+                <span aria-hidden="true" style="font-weight:800;">!</span><span>{{ authError }}</span>
+              </div>
+            </sc-if>
+
+            <button type="submit" disabled="{{ authBusy }}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;height:48px;border:none;border-radius:12px;background:var(--accent);color:var(--on-accent);font-weight:700;font-size:15px;cursor:pointer;margin-top:2px;">
+              <sc-if value="{{ authBusy }}"><span aria-hidden="true" style="width:16px;height:16px;border:2px solid color-mix(in srgb,var(--on-accent) 45%,transparent);border-top-color:var(--on-accent);border-radius:50%;animation:lg-spin .7s linear infinite;"></span></sc-if>
+              {{ authButtonLabel }}
+            </button>
+          </form>
+
+          <div style="margin-top:18px;text-align:center;font-size:13.5px;color:var(--text-2);">
+            {{ authSwitchPrompt }}
+            <button type="button" onClick="{{ switchAuth }}" style="background:none;border:none;padding:0 0 0 4px;color:var(--accent-ink);font-weight:700;font-size:13.5px;cursor:pointer;">{{ authSwitchAction }}</button>
+          </div>
+        </div>
+
+        <sc-if value="{{ showDemo }}">
+          <div style="margin-top:18px;background:var(--surface-2);border:1px dashed var(--border-strong);border-radius:14px;padding:16px;">
+            <div style="font-weight:700;font-size:12.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--text-3);margin-bottom:10px;">Demo accounts</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <button type="button" onClick="{{ fillCustomer }}" style="display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;text-align:left;padding:11px 13px;border:1px solid var(--border);border-radius:11px;background:var(--surface);cursor:pointer;color:var(--text);">
+                <span><span style="font-weight:700;">Customer</span> · alex@ledger.test</span><span style="color:var(--text-3);font-size:12.5px;">Use →</span>
+              </button>
+              <button type="button" onClick="{{ fillAdmin }}" style="display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;text-align:left;padding:11px 13px;border:1px solid var(--border);border-radius:11px;background:var(--surface);cursor:pointer;color:var(--text);">
+                <span><span style="font-weight:700;">Admin</span> · admin@ledger.test</span><span style="color:var(--text-3);font-size:12.5px;">Use →</span>
+              </button>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </main>
+  </sc-if>
+
+  <!-- ================= DASHBOARD ================= -->
+  <sc-if value="{{ isDashboard }}">
+    <main style="max-width:960px;margin:0 auto;padding:clamp(20px,4vw,40px);">
+      <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:26px;">
+        <div>
+          <p style="margin:0 0 4px;color:var(--text-2);font-size:14px;">{{ greeting }}</p>
+          <h1 style="margin:0;font-size:clamp(22px,3.4vw,30px);font-weight:800;letter-spacing:-.02em;">Your accounts</h1>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:12.5px;color:var(--text-3);font-weight:600;letter-spacing:.03em;text-transform:uppercase;">Total balance</div>
+          <div style="font-family:var(--mono);font-weight:600;font-size:clamp(24px,4vw,32px);letter-spacing:-.01em;font-variant-numeric:tabular-nums;">{{ totalBalanceUSD }}</div>
+        </div>
+      </div>
+
+      <sc-if value="{{ accountsLoading }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
+          <div style="height:150px;border-radius:var(--radius);background:var(--surface-3);animation:lg-pulse 1.3s ease-in-out infinite;"></div>
+          <div style="height:150px;border-radius:var(--radius);background:var(--surface-3);animation:lg-pulse 1.3s ease-in-out infinite .2s;"></div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ accountsError }}">
+        <div role="alert" style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:40px;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);">
+          <div style="color:var(--neg);font-weight:600;">{{ accountsError }}</div>
+          <button type="button" onClick="{{ retryAccounts }}" style="height:40px;padding:0 18px;border:1px solid var(--border-strong);border-radius:11px;background:var(--surface);color:var(--text);font-weight:600;cursor:pointer;">Try again</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ accountsEmpty }}">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:56px 24px;text-align:center;background:var(--surface);border:1px dashed var(--border-strong);border-radius:var(--radius);">
+          <div aria-hidden="true" style="width:52px;height:52px;border-radius:14px;background:var(--accent-weak);color:var(--accent-ink);display:grid;place-items:center;font-size:24px;font-weight:700;">+</div>
+          <div>
+            <div style="font-weight:700;font-size:17px;">No accounts yet</div>
+            <div style="color:var(--text-2);font-size:14px;margin-top:2px;">Open your first account to start moving money.</div>
+          </div>
+          <button type="button" onClick="{{ openAccountModal }}" style="height:44px;padding:0 20px;border:none;border-radius:12px;background:var(--accent);color:var(--on-accent);font-weight:700;cursor:pointer;">Open an account</button>
+        </div>
+      </sc-if>
+
+      <!-- cards layout -->
+      <sc-if value="{{ showAccountCards }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
+          <sc-for list="{{ accountsView }}" as="acct" hint-placeholder-count="2">
+            <button type="button" onClick="{{ acct.open }}" style="text-align:left;display:flex;flex-direction:column;gap:18px;padding:20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);cursor:pointer;color:var(--text);">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                <div style="display:flex;align-items:center;gap:9px;">
+                  <span style="font-weight:700;font-size:15px;">{{ acct.typeLabel }}</span>
+                </div>
+                <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:99px;background:var(--surface-2);font-size:11.5px;font-weight:700;letter-spacing:.02em;color:{{ acct.statusColor }};">
+                  <span aria-hidden="true" style="width:7px;height:7px;border-radius:50%;background:{{ acct.statusColor }};"></span>{{ acct.statusLabel }}
+                </span>
+              </div>
+              <div style="font-family:var(--mono);color:var(--text-3);font-size:13px;letter-spacing:.04em;">•••• {{ acct.last4 }}</div>
+              <div>
+                <div style="font-family:var(--mono);font-weight:600;font-size:26px;letter-spacing:-.01em;font-variant-numeric:tabular-nums;">{{ acct.balanceUSD }}</div>
+                <div style="margin-top:8px;color:var(--accent-ink);font-weight:600;font-size:13px;">View account →</div>
+              </div>
+            </button>
+          </sc-for>
+          <button type="button" onClick="{{ openAccountModal }}" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:150px;padding:20px;background:transparent;border:1px dashed var(--border-strong);border-radius:var(--radius);cursor:pointer;color:var(--text-2);">
+            <span aria-hidden="true" style="width:38px;height:38px;border-radius:11px;background:var(--accent-weak);color:var(--accent-ink);display:grid;place-items:center;font-size:22px;font-weight:700;">+</span>
+            <span style="font-weight:600;font-size:14px;">Open new account</span>
+          </button>
+        </div>
+      </sc-if>
+
+      <!-- list layout -->
+      <sc-if value="{{ showAccountList }}">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;">
+          <sc-for list="{{ accountsView }}" as="acct" hint-placeholder-count="2">
+            <button type="button" onClick="{{ acct.open }}" style="width:100%;text-align:left;display:flex;align-items:center;gap:16px;padding:18px 20px;background:transparent;border:none;border-bottom:1px solid var(--border);cursor:pointer;color:var(--text);">
+              <span aria-hidden="true" style="width:40px;height:40px;border-radius:11px;background:var(--accent-weak);color:var(--accent-ink);display:grid;place-items:center;font-weight:700;">{{ acct.initial }}</span>
+              <span style="flex:1;min-width:0;">
+                <span style="display:flex;align-items:center;gap:9px;">
+                  <span style="font-weight:700;">{{ acct.typeLabel }}</span>
+                  <span style="font-size:11px;font-weight:700;letter-spacing:.02em;color:{{ acct.statusColor }};">{{ acct.statusLabel }}</span>
+                </span>
+                <span style="display:block;font-family:var(--mono);color:var(--text-3);font-size:12.5px;letter-spacing:.03em;">•••• {{ acct.last4 }}</span>
+              </span>
+              <span style="font-family:var(--mono);font-weight:600;font-size:19px;font-variant-numeric:tabular-nums;">{{ acct.balanceUSD }}</span>
+              <span aria-hidden="true" style="color:var(--text-3);font-size:18px;">›</span>
+            </button>
+          </sc-for>
+          <button type="button" onClick="{{ openAccountModal }}" style="width:100%;display:flex;align-items:center;gap:12px;padding:16px 20px;background:transparent;border:none;cursor:pointer;color:var(--accent-ink);font-weight:600;">
+            <span aria-hidden="true" style="width:40px;height:40px;border-radius:11px;background:var(--accent-weak);display:grid;place-items:center;font-size:20px;">+</span>Open new account
+          </button>
+        </div>
+      </sc-if>
+    </main>
+  </sc-if>
+
+  <!-- ================= ACCOUNT DETAIL ================= -->
+  <sc-if value="{{ isAccount }}">
+    <main style="max-width:840px;margin:0 auto;padding:clamp(20px,4vw,40px);">
+      <button type="button" onClick="{{ backToDashboard }}" style="display:inline-flex;align-items:center;gap:7px;background:none;border:none;color:var(--text-2);font-weight:600;font-size:14px;cursor:pointer;padding:0;margin-bottom:20px;"><span aria-hidden="true">←</span> All accounts</button>
+
+      <sc-if value="{{ currentLoading }}">
+        <div style="height:200px;border-radius:var(--radius);background:var(--surface-3);animation:lg-pulse 1.3s ease-in-out infinite;"></div>
+      </sc-if>
+      <sc-if value="{{ currentError }}">
+        <div role="alert" style="padding:30px;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--neg);font-weight:600;">{{ currentError }}</div>
+      </sc-if>
+
+      <sc-if value="{{ currentReady }}">
+        <section aria-label="Balance" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:clamp(22px,4vw,34px);margin-bottom:20px;">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;">
+            <div style="display:flex;align-items:center;gap:11px;">
+              <span style="font-weight:700;font-size:16px;">{{ curTypeLabel }}</span>
+              <span style="font-family:var(--mono);color:var(--text-3);font-size:13px;letter-spacing:.04em;">•••• {{ curLast4 }}</span>
+            </div>
+            <span style="display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:99px;background:var(--surface-2);font-size:12px;font-weight:700;color:{{ curStatusColor }};">
+              <span aria-hidden="true" style="width:7px;height:7px;border-radius:50%;background:{{ curStatusColor }};"></span>{{ curStatusLabel }}
+            </span>
+          </div>
+          <div style="margin:20px 0 6px;color:var(--text-3);font-size:12.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;">Available balance</div>
+          <div style="font-family:var(--mono);font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1;">
+            <span style="font-size:clamp(40px,8vw,60px);">{{ heroWhole }}</span><span style="font-size:clamp(22px,4vw,30px);color:var(--text-2);">{{ heroCents }}</span>
+            <span style="font-size:15px;color:var(--text-3);margin-left:8px;letter-spacing:.05em;">USD</span>
+          </div>
+
+          <sc-if value="{{ curFrozen }}">
+            <div style="margin-top:18px;display:flex;gap:9px;padding:11px 14px;border-radius:12px;background:var(--warn-weak);color:var(--warn);font-size:13px;font-weight:600;"><span aria-hidden="true">⚠</span> This account is frozen. Deposits, withdrawals and transfers are paused.</div>
+          </sc-if>
+          <sc-if value="{{ curClosed }}">
+            <div style="margin-top:18px;display:flex;gap:9px;padding:11px 14px;border-radius:12px;background:var(--neg-weak);color:var(--neg);font-size:13px;font-weight:600;"><span aria-hidden="true">✕</span> This account is closed.</div>
+          </sc-if>
+
+          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:24px;">
+            <button type="button" disabled="{{ moneyDisabled }}" onClick="{{ openDeposit }}" style="flex:1;min-width:120px;height:46px;border:none;border-radius:12px;background:var(--accent);color:var(--on-accent);font-weight:700;font-size:14.5px;cursor:pointer;">Deposit</button>
+            <button type="button" disabled="{{ moneyDisabled }}" onClick="{{ openWithdraw }}" style="flex:1;min-width:120px;height:46px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);color:var(--text);font-weight:700;font-size:14.5px;cursor:pointer;">Withdraw</button>
+            <button type="button" disabled="{{ moneyDisabled }}" onClick="{{ openTransfer }}" style="flex:1;min-width:120px;height:46px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);color:var(--text);font-weight:700;font-size:14.5px;cursor:pointer;">Transfer</button>
+          </div>
+        </section>
+
+        <section aria-label="Transaction history" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid var(--border);">
+            <h2 style="margin:0;font-size:15px;font-weight:700;">Transactions</h2>
+            <span style="font-size:12.5px;color:var(--text-3);">{{ txRangeText }}</span>
+          </div>
+
+          <sc-if value="{{ txLoading }}">
+            <div style="padding:40px;display:grid;place-items:center;"><div style="width:22px;height:22px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:lg-spin .7s linear infinite;"></div></div>
+          </sc-if>
+          <sc-if value="{{ txEmpty }}">
+            <div style="padding:48px 24px;text-align:center;color:var(--text-3);">
+              <div style="font-weight:600;color:var(--text-2);">No transactions yet</div>
+              <div style="font-size:13.5px;margin-top:4px;">Deposits, withdrawals and transfers will appear here.</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ txError }}">
+            <div role="alert" style="padding:30px;text-align:center;color:var(--neg);font-weight:600;">{{ txError }}</div>
+          </sc-if>
+
+          <sc-if value="{{ txReady }}">
+            <ul style="list-style:none;margin:0;padding:0;">
+              <sc-for list="{{ txView }}" as="row" hint-placeholder-count="5">
+                <li style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border);">
+                  <span aria-hidden="true" style="{{ row.iconStyle }}">{{ row.arrow }}</span>
+                  <span style="flex:1;min-width:0;">
+                    <span style="display:block;font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ row.description }}</span>
+                    <span style="display:block;font-size:12.5px;color:var(--text-3);">{{ row.date }}</span>
+                  </span>
+                  <span style="text-align:right;">
+                    <span style="display:block;font-family:var(--mono);font-weight:600;font-size:15px;font-variant-numeric:tabular-nums;color:{{ row.amountColor }};">{{ row.amountLabel }}</span>
+                    <span style="display:block;font-family:var(--mono);font-size:11.5px;color:var(--text-3);font-variant-numeric:tabular-nums;">bal {{ row.balanceUSD }}</span>
+                    <span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">{{ row.srLabel }}</span>
+                  </span>
+                </li>
+              </sc-for>
+            </ul>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;">
+              <button type="button" disabled="{{ txPrevDisabled }}" onClick="{{ txPrev }}" style="height:38px;padding:0 15px;border:1px solid var(--border-strong);border-radius:10px;background:var(--surface);color:var(--text);font-weight:600;font-size:13.5px;cursor:pointer;">← Newer</button>
+              <span style="font-size:12.5px;color:var(--text-3);">{{ txPageLabel }}</span>
+              <button type="button" disabled="{{ txNextDisabled }}" onClick="{{ txNext }}" style="height:38px;padding:0 15px;border:1px solid var(--border-strong);border-radius:10px;background:var(--surface);color:var(--text);font-weight:600;font-size:13.5px;cursor:pointer;">Older →</button>
+            </div>
+          </sc-if>
+        </section>
+      </sc-if>
+    </main>
+  </sc-if>
+
+  <!-- ================= ADMIN ================= -->
+  <sc-if value="{{ isAdmin }}">
+    <main style="max-width:720px;margin:0 auto;padding:clamp(20px,4vw,40px);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+        <span style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--on-accent);background:var(--accent);padding:3px 9px;border-radius:99px;">Admin</span>
+      </div>
+      <h1 style="margin:0 0 22px;font-size:clamp(22px,3.4vw,28px);font-weight:800;letter-spacing:-.02em;">Account administration</h1>
+
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px;margin-bottom:20px;">
+        <form onSubmit="{{ adminLookup }}" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+          <div style="flex:1;min-width:200px;">
+            <label for="admin-id" style="display:block;font-weight:600;font-size:13px;color:var(--text-2);margin-bottom:7px;">Account ID</label>
+            <input id="admin-id" name="adminQuery" inputmode="numeric" value="{{ adminQuery }}" onInput="{{ onAdminQuery }}" placeholder="e.g. 1006" style="width:100%;height:46px;padding:0 14px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);color:var(--text);font-family:var(--mono);font-size:15px;" />
+          </div>
+          <button type="submit" disabled="{{ adminLoading }}" style="height:46px;padding:0 22px;border:none;border-radius:12px;background:var(--accent);color:var(--on-accent);font-weight:700;cursor:pointer;">Look up</button>
+        </form>
+        <sc-if value="{{ adminError }}">
+          <div role="alert" style="margin-top:14px;padding:11px 14px;border-radius:12px;background:var(--neg-weak);color:var(--neg);font-size:13.5px;font-weight:600;">{{ adminError }}</div>
+        </sc-if>
+      </div>
+
+      <sc-if value="{{ adminAccount }}">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px;">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;">
+            <div>
+              <div style="font-family:var(--mono);font-size:12.5px;color:var(--text-3);">Account #{{ adminAcct.id }}</div>
+              <div style="font-weight:800;font-size:19px;margin-top:2px;">{{ adminAcct.ownerName }}</div>
+              <div style="font-size:13px;color:var(--text-2);">{{ adminAcct.ownerEmail }}</div>
+            </div>
+            <span style="display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:99px;background:var(--surface-2);font-size:12.5px;font-weight:700;color:{{ adminAcct.statusColor }};">
+              <span aria-hidden="true" style="width:8px;height:8px;border-radius:50%;background:{{ adminAcct.statusColor }};"></span>{{ adminAcct.statusLabel }}
+            </span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin:20px 0;padding:18px;background:var(--surface-2);border-radius:14px;">
+            <div><div style="font-size:12px;color:var(--text-3);font-weight:600;">Type</div><div style="font-weight:700;margin-top:3px;">{{ adminAcct.typeLabel }}</div></div>
+            <div><div style="font-size:12px;color:var(--text-3);font-weight:600;">Account number</div><div style="font-weight:700;margin-top:3px;font-family:var(--mono);">{{ adminAcct.accountNumber }}</div></div>
+            <div><div style="font-size:12px;color:var(--text-3);font-weight:600;">Balance</div><div style="font-weight:700;margin-top:3px;font-family:var(--mono);font-variant-numeric:tabular-nums;">{{ adminAcct.balanceUSD }}</div></div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;">
+            <button type="button" onClick="{{ adminFreezeClick }}" style="height:44px;padding:0 18px;border:1px solid var(--warn);border-radius:12px;background:var(--warn-weak);color:var(--warn);font-weight:700;cursor:pointer;">{{ freezeLabel }}</button>
+            <button type="button" onClick="{{ adminCloseClick }}" disabled="{{ adminClosed }}" style="height:44px;padding:0 18px;border:1px solid var(--neg);border-radius:12px;background:var(--neg-weak);color:var(--neg);font-weight:700;cursor:pointer;">Close account</button>
+          </div>
+        </div>
+      </sc-if>
+    </main>
+  </sc-if>
+
+  <!-- ================= MONEY / OPEN MODAL ================= -->
+  <sc-if value="{{ modalOpen }}">
+    <div onClick="{{ onOverlayClick }}" onKeyDown="{{ onOverlayKey }}" style="position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:20px;background:rgba(8,12,17,.55);backdrop-filter:blur(3px);">
+      <div role="dialog" aria-modal="true" aria-labelledby="modal-title" onClick="{{ stop }}" style="width:100%;max-width:440px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-lg);animation:lg-in .18s ease;overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 22px;border-bottom:1px solid var(--border);">
+          <h2 id="modal-title" style="margin:0;font-size:17px;font-weight:800;">{{ modalTitle }}</h2>
+          <button type="button" onClick="{{ closeModal }}" aria-label="Close" style="width:34px;height:34px;border:none;border-radius:9px;background:var(--surface-2);color:var(--text-2);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+        </div>
+
+        <!-- SUCCESS RESULT -->
+        <sc-if value="{{ modalResult }}">
+          <div style="padding:26px 22px;text-align:center;">
+            <div aria-hidden="true" style="width:52px;height:52px;margin:0 auto 14px;border-radius:50%;background:var(--pos-weak);color:var(--pos);display:grid;place-items:center;font-size:26px;font-weight:800;">✓</div>
+            <div style="font-weight:800;font-size:18px;">{{ resultTitle }}</div>
+            <sc-if value="{{ resultReplayed }}">
+              <div style="margin-top:8px;font-size:13px;color:var(--text-2);background:var(--surface-2);border-radius:10px;padding:9px 12px;">Matched an earlier request — no new movement was made (idempotent retry).</div>
+            </sc-if>
+            <div style="margin:20px 0 6px;color:var(--text-3);font-size:12.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;">{{ resultBalanceLabel }}</div>
+            <div style="font-family:var(--mono);font-weight:600;font-size:34px;font-variant-numeric:tabular-nums;">{{ resultBalanceUSD }}</div>
+            <button type="button" onClick="{{ closeModal }}" style="margin-top:22px;width:100%;height:46px;border:none;border-radius:12px;background:var(--accent);color:var(--on-accent);font-weight:700;cursor:pointer;">Done</button>
+          </div>
+        </sc-if>
+
+        <!-- FORM -->
+        <sc-if value="{{ modalFormShown }}">
+          <form onSubmit="{{ submitModal }}" novalidate="true" style="padding:22px;display:flex;flex-direction:column;gap:16px;">
+
+            <sc-if value="{{ isTransfer }}">
+              <div>
+                <label for="m-source" style="display:block;font-weight:600;font-size:13px;color:var(--text-2);margin-bottom:7px;">From account</label>
+                <select id="m-source" value="{{ modalSource }}" onChange="{{ onModalSource }}" style="width:100%;height:46px;padding:0 12px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);color:var(--text);font-size:14.5px;">
+                  <sc-for list="{{ sourceOptions }}" as="opt" hint-placeholder-count="2">
+                    <option value="{{ opt.id }}">{{ opt.label }}</option>
+                  </sc-for>
+                </select>
+              </div>
+              <div>
+                <label for="m-dest" style="display:block;font-weight:600;font-size:13px;color:var(--text-2);margin-bottom:7px;">To account ID</label>
+                <input id="m-dest" inputmode="numeric" value="{{ modalDest }}" onInput="{{ onModalDest }}" placeholder="Destination account id" style="width:100%;height:46px;padding:0 14px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);color:var(--text);font-family:var(--mono);font-size:15px;" />
+                <sc-if value="{{ demoDestHint }}"><div style="margin-top:6px;font-size:12px;color:var(--text-3);">Demo tip: account id {{ demoDestHint }} exists as a transfer target.</div></sc-if>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isOpen }}">
+              <div>
+                <label for="m-type" style="display:block;font-weight:600;font-size:13px;color:var(--text-2);margin-bottom:7px;">Account type</label>
+                <select id="m-type" value="{{ modalType }}" onChange="{{ onModalType }}" style="width:100%;height:46px;padding:0 12px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);color:var(--text);font-size:14.5px;">
+                  <option value="CHECKING">Checking</option>
+                  <option value="SAVINGS">Savings</option>
+                </select>
+                <div style="margin-top:8px;font-size:12.5px;color:var(--text-3);">Opens a new USD account with a $0.00 balance.</div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ showAmount }}">
+              <div>
+                <label for="m-amount" style="display:block;font-weight:600;font-size:13px;color:var(--text-2);margin-bottom:7px;">Amount (USD)</label>
+                <div style="position:relative;">
+                  <span aria-hidden="true" style="position:absolute;left:15px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:19px;color:var(--text-3);">$</span>
+                  <input id="m-amount" inputmode="decimal" value="{{ modalAmount }}" onInput="{{ onModalAmount }}" placeholder="0.00" style="width:100%;height:54px;padding:0 15px 0 32px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);color:var(--text);font-family:var(--mono);font-size:22px;font-variant-numeric:tabular-nums;" />
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ modalError }}">
+              <div role="alert" style="display:flex;gap:9px;padding:12px 14px;border-radius:12px;background:var(--neg-weak);border:1px solid color-mix(in srgb,var(--neg) 30%,transparent);color:var(--neg);font-size:13.5px;font-weight:500;">
+                <span aria-hidden="true" style="font-weight:800;">!</span><span>{{ modalError }}</span>
+              </div>
+            </sc-if>
+
+            <div style="display:flex;gap:10px;margin-top:2px;">
+              <button type="button" onClick="{{ closeModal }}" style="flex:1;height:48px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);color:var(--text);font-weight:700;cursor:pointer;">Cancel</button>
+              <button type="submit" disabled="{{ modalBusy }}" style="flex:1.4;display:inline-flex;align-items:center;justify-content:center;gap:9px;height:48px;border:none;border-radius:12px;background:{{ submitColor }};color:var(--on-accent);font-weight:700;cursor:pointer;">
+                <sc-if value="{{ modalBusy }}"><span aria-hidden="true" style="width:16px;height:16px;border:2px solid color-mix(in srgb,var(--on-accent) 45%,transparent);border-top-color:var(--on-accent);border-radius:50%;animation:lg-spin .7s linear infinite;"></span></sc-if>
+                {{ submitLabel }}
+              </button>
+            </div>
+            <sc-if value="{{ isConflict }}">
+              <button type="button" onClick="{{ retryModal }}" style="height:44px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface-2);color:var(--text);font-weight:700;cursor:pointer;">Try again (same request)</button>
+            </sc-if>
+          </form>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ================= ADMIN CONFIRM ================= -->
+  <sc-if value="{{ confirmOpen }}">
+    <div onKeyDown="{{ onOverlayKey }}" style="position:fixed;inset:0;z-index:70;display:grid;place-items:center;padding:20px;background:rgba(8,12,17,.55);backdrop-filter:blur(3px);">
+      <div role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" style="width:100%;max-width:420px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-lg);padding:24px;animation:lg-in .18s ease;">
+        <h2 id="confirm-title" style="margin:0 0 8px;font-size:18px;font-weight:800;">{{ confirmTitle }}</h2>
+        <p style="margin:0 0 22px;color:var(--text-2);font-size:14.5px;">{{ confirmBody }}</p>
+        <div style="display:flex;gap:10px;">
+          <button type="button" onClick="{{ cancelConfirm }}" style="flex:1;height:46px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);color:var(--text);font-weight:700;cursor:pointer;">Cancel</button>
+          <button type="button" disabled="{{ confirmBusy }}" onClick="{{ doConfirm }}" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:46px;border:none;border-radius:12px;background:{{ confirmColor }};color:#fff;font-weight:700;cursor:pointer;">
+            <sc-if value="{{ confirmBusy }}"><span aria-hidden="true" style="width:15px;height:15px;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;animation:lg-spin .7s linear infinite;"></span></sc-if>
+            {{ confirmActionLabel }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ================= SETTINGS ================= -->
+  <sc-if value="{{ settingsOpen }}">
+    <div onKeyDown="{{ onOverlayKey }}" onClick="{{ closeSettings }}" style="position:fixed;inset:0;z-index:70;display:grid;place-items:center;padding:20px;background:rgba(8,12,17,.55);backdrop-filter:blur(3px);">
+      <div role="dialog" aria-modal="true" aria-labelledby="set-title" onClick="{{ stop }}" style="width:100%;max-width:440px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-lg);padding:24px;animation:lg-in .18s ease;">
+        <h2 id="set-title" style="margin:0 0 4px;font-size:17px;font-weight:800;">Connection</h2>
+        <p style="margin:0 0 20px;color:var(--text-2);font-size:13.5px;">Point the app at your API, or use the built-in demo backend.</p>
+        <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px;border:1px solid var(--border);border-radius:12px;margin-bottom:14px;cursor:pointer;">
+          <span><span style="display:block;font-weight:700;font-size:14px;">Demo backend</span><span style="font-size:12.5px;color:var(--text-3);">In-memory ledger with seeded data</span></span>
+          <input type="checkbox" checked="{{ useMock }}" onChange="{{ toggleMock }}" style="width:20px;height:20px;accent-color:var(--accent);" />
+        </label>
+        <div style="margin-bottom:20px;">
+          <label for="set-url" style="display:block;font-weight:600;font-size:13px;color:var(--text-2);margin-bottom:7px;">API base URL</label>
+          <input id="set-url" value="{{ baseUrl }}" onInput="{{ onBaseUrl }}" disabled="{{ useMock }}" style="width:100%;height:44px;padding:0 14px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);color:var(--text);font-family:var(--mono);font-size:13.5px;" />
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button type="button" onClick="{{ closeSettings }}" style="flex:1;height:44px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);color:var(--text);font-weight:700;cursor:pointer;">Close</button>
+          <button type="button" onClick="{{ applySettings }}" style="flex:1;height:44px;border:none;border-radius:12px;background:var(--accent);color:var(--on-accent);font-weight:700;cursor:pointer;">Apply</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ================= TOASTS ================= -->
+  <div aria-live="polite" style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:90;display:flex;flex-direction:column;gap:10px;width:calc(100% - 40px);max-width:400px;pointer-events:none;">
+    <sc-for list="{{ toasts }}" as="t" hint-placeholder-count="0">
+      <div role="status" style="{{ t.style }}">
+        <span aria-hidden="true" style="{{ t.iconStyle }}">{{ t.icon }}</span>
+        <span style="flex:1;font-size:14px;font-weight:600;">{{ t.msg }}</span>
+      </div>
+    </sc-for>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:720},&quot;brandName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Ledger&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Brand&quot;},&quot;dashboardLayout&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;cards&quot;,&quot;list&quot;],&quot;default&quot;:&quot;cards&quot;,&quot;tsType&quot;:&quot;'cards' | 'list'&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;showDemoHelpers&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Demo&quot;}}">
+class Component extends DCLogic {
+  state = {
+    ready: false, theme: 'light', route: 'auth',
+    authView: 'login', authFields: { fullName: '', email: '', password: '' }, authError: null, authBusy: false,
+    customer: null,
+    accounts: null, accountsLoading: false, accountsError: null,
+    currentId: null, current: null, currentLoading: false, currentError: null,
+    tx: null, txLoading: false, txError: null, txPage: 0,
+    modal: null, modalAmount: '', modalDest: '', modalType: 'CHECKING', modalSource: null,
+    modalBusy: false, modalError: null, modalErrorCode: null, modalResult: null, idemKey: null,
+    admin: { query: '', account: null, loading: false, error: null, confirm: null, busy: false },
+    toasts: [],
+    settingsOpen: false, baseUrl: 'http://localhost:8080', useMock: true,
+  };
+  _toastSeq = 0;
+
+  async componentDidMount() {
+    this.api = await import('./api.js');
+    this.client = new this.api.ApiClient({ baseUrl: this.state.baseUrl, useMock: this.state.useMock });
+    let theme = 'light';
+    try { if (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) theme = 'dark'; } catch (e) {}
+    this._onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      if (this.state.settingsOpen) this.setState({ settingsOpen: false });
+      else if (this.state.admin.confirm) this.cancelConfirm();
+      else if (this.state.modal) this.closeModal();
+    };
+    window.addEventListener('keydown', this._onKey);
+    this.setState({ ready: true, theme });
+  }
+  componentWillUnmount() { if (this._onKey) window.removeEventListener('keydown', this._onKey); }
+
+  // ---------- helpers ----------
+  fmtUSD(dec) {
+    if (dec == null) return '$0.00';
+    const neg = String(dec).startsWith('-');
+    const [w, f = '00'] = String(dec).replace('-', '').split('.');
+    const ws = w.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return (neg ? '-' : '') + '$' + ws + '.' + (f + '00').slice(0, 2);
+  }
+  fmtUSDParts(dec) {
+    const s = this.fmtUSD(dec);
+    const i = s.lastIndexOf('.');
+    return { whole: s.slice(0, i), cents: s.slice(i) };
+  }
+  fmtDate(iso) {
+    try {
+      return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    } catch (e) { return iso; }
+  }
+  typeLabel(t) { return ({ CHECKING: 'Checking', SAVINGS: 'Savings' })[t] || (t ? t[0] + t.slice(1).toLowerCase() : ''); }
+  statusLabel(s) { return ({ ACTIVE: 'Active', FROZEN: 'Frozen', CLOSED: 'Closed' })[s] || s; }
+  statusColor(s) { return s === 'ACTIVE' ? 'var(--pos)' : s === 'FROZEN' ? 'var(--warn)' : 'var(--neg)'; }
+  normalizeAmount(str) {
+    const t = String(str || '').trim();
+    if (!t) return { ok: false, error: 'Enter an amount.' };
+    if (!/^\d*(\.\d*)?$/.test(t)) return { ok: false, error: 'Amounts can only contain digits and a decimal point.' };
+    let [w, f = ''] = t.split('.');
+    w = w || '0'; f = (f + '00').slice(0, 2);
+    const cents = parseInt(w, 10) * 100 + parseInt(f, 10);
+    if (!(cents > 0)) return { ok: false, error: 'Enter an amount greater than zero.' };
+    return { ok: true, value: `${parseInt(w, 10)}.${f}` };
+  }
+  toast(kind, msg) {
+    const id = ++this._toastSeq;
+    this.setState(s => ({ toasts: [...s.toasts, { id, kind, msg }] }));
+    setTimeout(() => this.setState(s => ({ toasts: s.toasts.filter(t => t.id !== id) })), 4200);
+  }
+
+  // ---------- theme / chrome ----------
+  setLight = () => this.setState({ theme: 'light' });
+  setDark = () => this.setState({ theme: 'dark' });
+  openSettings = () => this.setState({ settingsOpen: true });
+  closeSettings = () => this.setState({ settingsOpen: false });
+  stop = (e) => e.stopPropagation();
+  onOverlayClick = () => this.closeModal();
+  onOverlayKey = (e) => { if (e.key === 'Escape') { this.closeModal(); this.cancelConfirm(); this.setState({ settingsOpen: false }); } };
+  toggleMock = (e) => this.setState({ useMock: e.target.checked });
+  onBaseUrl = (e) => this.setState({ baseUrl: e.target.value });
+  applySettings = () => {
+    this.client.setMode(this.state.useMock);
+    this.client.setBaseUrl(this.state.baseUrl);
+    if (this.state.customer) { this.client.clearAuth(); }
+    this.setState({ settingsOpen: false, route: 'auth', customer: null, accounts: null });
+    this.toast('info', 'Connection updated — please sign in again.');
+  };
+
+  // ---------- auth ----------
+  onAuthField = (e) => {
+    const { name, value } = e.target;
+    this.setState(s => ({ authFields: { ...s.authFields, [name]: value }, authError: null }));
+  };
+  switchAuth = () => this.setState(s => ({ authView: s.authView === 'login' ? 'register' : 'login', authError: null }));
+  fillCustomer = () => this.setState({ authView: 'login', authFields: { fullName: '', email: 'alex@ledger.test', password: 'Password123' }, authError: null });
+  fillAdmin = () => this.setState({ authView: 'login', authFields: { fullName: '', email: 'admin@ledger.test', password: 'Admin12345' }, authError: null });
+  pwScore(p) { let s = 0; if (!p) return 0; if (p.length >= 8) s++; if (/[A-Z]/.test(p)) s++; if (/\d/.test(p)) s++; if (/[^a-zA-Z0-9]/.test(p)) s++; return s; }
+
+  submitAuth = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const { authView, authFields } = this.state;
+    const email = authFields.email.trim(), password = authFields.password;
+    this.setState({ authBusy: true, authError: null });
+    try {
+      if (authView === 'register') {
+        if (!authFields.fullName.trim()) throw { friendly: 'Enter your full name.' };
+        if (this.pwScore(password) < 3) throw { friendly: 'Choose a stronger password: 8+ characters with a letter and a number.' };
+        await this.client.register({ fullName: authFields.fullName.trim(), email, password });
+      }
+      const me = await this.client.authenticate(email, password);
+      this.client.setAuth(email, password);
+      const route = me.role === 'ADMIN' ? 'admin' : 'dashboard';
+      this.setState({ customer: me, route, authBusy: false, authFields: { fullName: '', email: '', password: '' } });
+      if (route === 'dashboard') this.loadAccounts();
+      this.toast('success', authView === 'register' ? 'Account created — welcome.' : 'Signed in.');
+    } catch (err) {
+      this.setState({ authBusy: false, authError: err.friendly || err.message || 'Something went wrong.' });
+    }
+  };
+  logout = () => {
+    this.client.clearAuth();
+    this.setState({ route: 'auth', customer: null, accounts: null, current: null, currentId: null, tx: null, authView: 'login' });
+  };
+
+  // ---------- accounts ----------
+  loadAccounts = async () => {
+    this.setState({ accountsLoading: true, accountsError: null });
+    try {
+      const r = await this.client.listAccounts();
+      this.setState({ accounts: r.content || [], accountsLoading: false });
+    } catch (err) {
+      this.setState({ accountsLoading: false, accountsError: err.friendly || 'Could not load accounts.' });
+    }
+  };
+  retryAccounts = () => this.loadAccounts();
+
+  openDetail = (id) => {
+    this.setState({ route: 'account', currentId: id, current: null, currentError: null, tx: null, txPage: 0 });
+    this.loadAccount(id);
+    this.loadTx(id, 0);
+  };
+  loadAccount = async (id) => {
+    this.setState({ currentLoading: true, currentError: null });
+    try {
+      const a = await this.client.getAccount(id);
+      this.setState({ current: a, currentLoading: false });
+    } catch (err) {
+      this.setState({ currentLoading: false, currentError: err.friendly || 'Could not load this account.' });
+    }
+  };
+  loadTx = async (id, page) => {
+    this.setState({ txLoading: true, txError: null });
+    try {
+      const r = await this.client.getTransactions(id, page, 8);
+      this.setState({ tx: r, txPage: r.page, txLoading: false });
+    } catch (err) {
+      this.setState({ txLoading: false, txError: err.friendly || 'Could not load transactions.' });
+    }
+  };
+  txPrev = () => { const p = Math.max(0, this.state.txPage - 1); this.loadTx(this.state.currentId, p); };
+  txNext = () => { const p = this.state.txPage + 1; this.loadTx(this.state.currentId, p); };
+  backToDashboard = () => { this.setState({ route: 'dashboard' }); this.loadAccounts(); };
+
+  // ---------- modals ----------
+  openAccountModal = () => this.setState({ modal: 'open', modalType: 'CHECKING', modalError: null, modalResult: null, modalBusy: false, idemKey: null });
+  openMoney = (kind) => this.setState({
+    modal: kind, modalAmount: '', modalDest: '', modalError: null, modalErrorCode: null, modalResult: null, modalBusy: false,
+    modalSource: this.state.currentId, idemKey: this.api.newIdempotencyKey(),
+  });
+  openDeposit = () => this.openMoney('deposit');
+  openWithdraw = () => this.openMoney('withdraw');
+  openTransfer = () => this.openMoney('transfer');
+  closeModal = () => { if (this.state.modal) this.setState({ modal: null, modalResult: null, modalError: null, idemKey: null }); };
+  onModalAmount = (e) => this.setState({ modalAmount: e.target.value.replace(/[^\d.]/g, ''), modalError: null });
+  onModalDest = (e) => this.setState({ modalDest: e.target.value.replace(/[^\d]/g, ''), modalError: null });
+  onModalType = (e) => this.setState({ modalType: e.target.value });
+  onModalSource = (e) => this.setState({ modalSource: Number(e.target.value), modalError: null });
+
+  submitModal = (e) => { if (e && e.preventDefault) e.preventDefault(); this.runModal(false); };
+  retryModal = () => this.runModal(true);
+  runModal = async (isRetry) => {
+    const { modal } = this.state;
+    if (modal === 'open') return this.submitOpen();
+    const norm = this.normalizeAmount(this.state.modalAmount);
+    if (!norm.ok) { this.setState({ modalError: norm.error }); return; }
+    if (modal === 'transfer') {
+      const dest = String(this.state.modalDest).trim();
+      if (!dest) { this.setState({ modalError: 'Enter a destination account id.' }); return; }
+      if (String(this.state.modalSource) === dest) { this.setState({ modalError: 'Choose a destination different from the source.' }); return; }
+    }
+    const key = this.state.idemKey; // reused on retry — never regenerated here
+    this.setState({ modalBusy: true, modalError: null, modalErrorCode: null });
+    try {
+      let res;
+      if (modal === 'deposit') res = await this.client.deposit(this.state.currentId, norm.value, key);
+      else if (modal === 'withdraw') res = await this.client.withdraw(this.state.currentId, norm.value, key);
+      else res = await this.client.transfer({ sourceAccountId: this.state.modalSource, destinationAccountId: Number(this.state.modalDest), amount: norm.value }, key);
+      this.setState({ modalBusy: false, modalResult: { balance: res.balance, replayed: !!res.replayed } });
+      this.loadAccount(this.state.currentId);
+      this.loadTx(this.state.currentId, this.state.txPage);
+      this.loadAccounts();
+      const verb = modal === 'deposit' ? 'Deposit' : modal === 'withdraw' ? 'Withdrawal' : 'Transfer';
+      this.toast('success', res.replayed ? `${verb} already processed.` : `${verb} of ${this.fmtUSD(norm.value)} complete.`);
+    } catch (err) {
+      this.setState({ modalBusy: false, modalError: err.friendly || 'Something went wrong.', modalErrorCode: err.code });
+    }
+  };
+  submitOpen = async () => {
+    this.setState({ modalBusy: true, modalError: null });
+    try {
+      const acct = await this.client.openAccount(this.state.modalType);
+      this.setState({ modalBusy: false, modal: null });
+      this.toast('success', `${this.typeLabel(this.state.modalType)} account opened.`);
+      this.loadAccounts();
+    } catch (err) {
+      this.setState({ modalBusy: false, modalError: err.friendly || 'Could not open the account.' });
+    }
+  };
+
+  // ---------- admin ----------
+  onAdminQuery = (e) => this.setState(s => ({ admin: { ...s.admin, query: e.target.value.replace(/[^\d]/g, ''), error: null } }));
+  adminLookup = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const id = this.state.admin.query.trim();
+    if (!id) { this.setState(s => ({ admin: { ...s.admin, error: 'Enter an account id to look up.' } })); return; }
+    this.setState(s => ({ admin: { ...s.admin, loading: true, error: null } }));
+    try {
+      const a = await this.client.adminGetAccount(id);
+      this.setState(s => ({ admin: { ...s.admin, account: a, loading: false } }));
+    } catch (err) {
+      this.setState(s => ({ admin: { ...s.admin, loading: false, account: null, error: err.friendly || 'Could not find that account.' } }));
+    }
+  };
+  adminFreezeClick = () => {
+    const a = this.state.admin.account;
+    const freezing = a.status !== 'FROZEN';
+    this.setState(s => ({ admin: { ...s.admin, confirm: freezing ? 'freeze' : 'unfreeze' } }));
+  };
+  adminCloseClick = () => this.setState(s => ({ admin: { ...s.admin, confirm: 'close' } }));
+  cancelConfirm = () => { if (this.state.admin.confirm) this.setState(s => ({ admin: { ...s.admin, confirm: null } })); };
+  doConfirm = async () => {
+    const action = this.state.admin.confirm;
+    const id = this.state.admin.account.id;
+    this.setState(s => ({ admin: { ...s.admin, busy: true } }));
+    try {
+      if (action === 'close') await this.client.adminClose(id);
+      else await this.client.adminFreeze(id); // toggles
+      const fresh = await this.client.adminGetAccount(id);
+      this.setState(s => ({ admin: { ...s.admin, account: fresh, confirm: null, busy: false } }));
+      this.toast('success', action === 'close' ? 'Account closed.' : action === 'unfreeze' ? 'Account unfrozen.' : 'Account frozen.');
+    } catch (err) {
+      this.setState(s => ({ admin: { ...s.admin, confirm: null, busy: false, error: err.friendly || 'Action failed.' } }));
+      this.toast('error', err.friendly || 'Action failed.');
+    }
+  };
+
+  // ---------- render ----------
+  renderVals() {
+    const s = this.state;
+    const brand = this.props.brandName ?? 'Ledger';
+    const layout = this.props.dashboardLayout ?? 'cards';
+    const showDemo = (this.props.showDemoHelpers ?? true) && s.authView === 'login';
+    const isAdminUser = s.customer && s.customer.role === 'ADMIN';
+
+    // theme tabs
+    const tab = (active) => `height:30px;padding:0 13px;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;background:${active ? 'var(--surface)' : 'transparent'};color:${active ? 'var(--text)' : 'var(--text-3)'};box-shadow:${active ? 'var(--shadow)' : 'none'};`;
+
+    // accounts
+    const accountsView = (s.accounts || []).map(a => ({
+      id: a.id, typeLabel: this.typeLabel(a.type), initial: this.typeLabel(a.type)[0],
+      last4: String(a.accountNumber).slice(-4), balanceUSD: this.fmtUSD(a.balance),
+      statusLabel: this.statusLabel(a.status), statusColor: this.statusColor(a.status),
+      open: () => this.openDetail(a.id),
+    }));
+    let totalCents = 0;
+    (s.accounts || []).forEach(a => { const [w, f = '00'] = String(a.balance).split('.'); totalCents += parseInt(w, 10) * 100 + parseInt((f + '00').slice(0, 2), 10); });
+    const totalBalanceUSD = this.fmtUSD((totalCents / 100).toFixed(2));
+    const accountsEmpty = !s.accountsLoading && !s.accountsError && s.accounts && s.accounts.length === 0;
+    const hasAccounts = !s.accountsLoading && !s.accountsError && s.accounts && s.accounts.length > 0;
+
+    // current account
+    const cur = s.current;
+    const parts = cur ? this.fmtUSDParts(cur.balance) : { whole: '$0', cents: '.00' };
+    const curActive = cur && cur.status === 'ACTIVE';
+
+    // transactions
+    const txView = ((s.tx && s.tx.content) || []).map(e => {
+      const credit = e.direction === 'CREDIT';
+      return {
+        id: e.id, description: e.description || (credit ? 'Deposit' : 'Withdrawal'),
+        date: this.fmtDate(e.createdAt),
+        arrow: credit ? '↓' : '↑',
+        iconStyle: `flex:none;width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:17px;font-weight:800;background:${credit ? 'var(--pos-weak)' : 'var(--surface-2)'};color:${credit ? 'var(--pos)' : 'var(--text-2)'};`,
+        amountLabel: (credit ? '+' : '−') + this.fmtUSD(e.amount).replace('-', ''),
+        amountColor: credit ? 'var(--pos)' : 'var(--text)',
+        balanceUSD: this.fmtUSD(e.balanceAfter),
+        srLabel: `${credit ? 'Incoming' : 'Outgoing'} ${this.fmtUSD(e.amount)} on ${this.fmtDate(e.createdAt)}`,
+      };
+    });
+    const tx = s.tx;
+    const txReady = !s.txLoading && !s.txError && tx && tx.content && tx.content.length > 0;
+    const txEmpty = !s.txLoading && !s.txError && tx && tx.content && tx.content.length === 0;
+    const from = tx ? tx.page * tx.size + 1 : 0;
+    const to = tx ? tx.page * tx.size + tx.content.length : 0;
+
+    // modal derived
+    const modal = s.modal;
+    const modalTitles = { deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', open: 'Open new account' };
+    const submitLabels = { deposit: 'Confirm deposit', withdraw: 'Confirm withdrawal', transfer: 'Send transfer', open: 'Open account' };
+    const submitColors = { deposit: 'var(--accent)', withdraw: 'var(--accent)', transfer: 'var(--accent)', open: 'var(--accent)' };
+    const sourceOptions = accountsView.filter(a => (s.accounts || []).find(x => x.id === a.id && x.status === 'ACTIVE'))
+      .map(a => ({ id: a.id, label: `${a.typeLabel} ···· ${a.last4} — ${a.balanceUSD}` }));
+    const resultVerb = { deposit: 'Deposit complete', withdraw: 'Withdrawal complete', transfer: 'Transfer sent' }[modal] || 'Done';
+
+    // admin
+    const adminAcct = s.admin.account ? {
+      id: s.admin.account.id, ownerName: s.admin.account.ownerName || '—', ownerEmail: s.admin.account.ownerEmail || '—',
+      accountNumber: s.admin.account.accountNumber, typeLabel: this.typeLabel(s.admin.account.type),
+      balanceUSD: this.fmtUSD(s.admin.account.balance),
+      statusLabel: this.statusLabel(s.admin.account.status), statusColor: this.statusColor(s.admin.account.status),
+    } : null;
+    const adminStatus = s.admin.account && s.admin.account.status;
+    const confirmMap = {
+      freeze: { title: 'Freeze this account?', body: `Freezing account #${s.admin.account && s.admin.account.id} pauses all deposits, withdrawals and transfers until it is unfrozen.`, action: 'Freeze account', color: 'var(--warn)' },
+      unfreeze: { title: 'Unfreeze this account?', body: `Unfreezing account #${s.admin.account && s.admin.account.id} restores normal money movement.`, action: 'Unfreeze account', color: 'var(--accent)' },
+      close: { title: 'Close this account?', body: `Closing account #${s.admin.account && s.admin.account.id} is permanent. No further transactions will be possible.`, action: 'Close account', color: 'var(--neg)' },
+    };
+    const confirm = s.admin.confirm ? confirmMap[s.admin.confirm] : null;
+
+    // toasts
+    const toasts = s.toasts.map(t => {
+      const c = t.kind === 'success' ? 'var(--pos)' : t.kind === 'error' ? 'var(--neg)' : 'var(--accent)';
+      const icon = t.kind === 'success' ? '✓' : t.kind === 'error' ? '!' : 'i';
+      return {
+        id: t.id, msg: t.msg, icon,
+        style: `pointer-events:auto;display:flex;align-items:center;gap:11px;padding:13px 16px;border-radius:13px;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow-lg);animation:lg-toast .22s ease;`,
+        iconStyle: `flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:800;background:${c};color:#fff;`,
+      };
+    });
+
+    const pwScore = this.pwScore(s.authFields.password);
+    const pwLabels = ['Too short', 'Weak', 'Fair', 'Good', 'Strong'];
+    const pwColors = ['var(--neg)', 'var(--neg)', 'var(--warn)', 'var(--accent)', 'var(--pos)'];
+
+    return {
+      brand, booting: !s.ready, theme: s.theme,
+      isLight: s.theme === 'light', isDark: s.theme === 'dark', setLight: this.setLight, setDark: this.setDark,
+      lightTabStyle: tab(s.theme === 'light'), darkTabStyle: tab(s.theme === 'dark'),
+      openSettings: this.openSettings,
+      isAuthed: !!s.customer, customerName: s.customer && s.customer.fullName, roleLabel: isAdminUser ? 'Administrator' : 'Customer', logout: this.logout,
+
+      // routes
+      isAuth: s.ready && s.route === 'auth',
+      isDashboard: s.ready && s.route === 'dashboard',
+      isAccount: s.ready && s.route === 'account',
+      isAdmin: s.ready && s.route === 'admin',
+
+      // auth
+      authView: s.authView, isRegister: s.authView === 'register',
+      authHeading: s.authView === 'register' ? `Create your ${brand} account` : `Welcome to ${brand}`,
+      authSub: s.authView === 'register' ? 'A few details and you are ready to bank.' : 'Sign in to your accounts.',
+      authButtonLabel: s.authView === 'register' ? 'Create account' : 'Sign in',
+      authSwitchPrompt: s.authView === 'register' ? 'Already have an account?' : 'New to ' + brand + '?',
+      authSwitchAction: s.authView === 'register' ? 'Sign in' : 'Create one',
+      passwordAutocomplete: s.authView === 'register' ? 'new-password' : 'current-password',
+      onAuthField: this.onAuthField, switchAuth: this.switchAuth, submitAuth: this.submitAuth,
+      authFullName: s.authFields.fullName, authEmail: s.authFields.email, authPassword: s.authFields.password,
+      authError: s.authError, authBusy: s.authBusy,
+      showDemo, fillCustomer: this.fillCustomer, fillAdmin: this.fillAdmin,
+      showPwMeter: s.authView === 'register' && s.authFields.password.length > 0,
+      pwLabel: pwLabels[pwScore], pwLabelStyle: `font-weight:700;color:${pwColors[pwScore]};`,
+      pwBarStyle: `height:100%;border-radius:99px;width:${(pwScore / 4) * 100}%;background:${pwColors[pwScore]};transition:width .2s,background .2s;`,
+
+      // dashboard
+      greeting: s.customer ? `Hello, ${s.customer.fullName.split(' ')[0]}` : 'Welcome',
+      accountsLoading: s.accountsLoading, accountsError: s.accountsError, accountsEmpty,
+      accountsView, totalBalanceUSD, retryAccounts: this.retryAccounts, openAccountModal: this.openAccountModal,
+      showAccountCards: hasAccounts && layout === 'cards',
+      showAccountList: hasAccounts && layout === 'list',
+
+      // account detail
+      currentLoading: s.currentLoading, currentError: s.currentError, currentReady: !s.currentLoading && !s.currentError && !!cur,
+      curTypeLabel: cur ? this.typeLabel(cur.type) : '', curLast4: cur ? String(cur.accountNumber).slice(-4) : '',
+      curStatusLabel: cur ? this.statusLabel(cur.status) : '', curStatusColor: cur ? this.statusColor(cur.status) : '',
+      heroWhole: parts.whole, heroCents: parts.cents,
+      curFrozen: cur && cur.status === 'FROZEN', curClosed: cur && cur.status === 'CLOSED',
+      moneyDisabled: !curActive,
+      openDeposit: this.openDeposit, openWithdraw: this.openWithdraw, openTransfer: this.openTransfer, backToDashboard: this.backToDashboard,
+
+      // transactions
+      txLoading: s.txLoading, txError: s.txError, txReady, txEmpty, txView,
+      txRangeText: tx ? `${from}–${to} of ${tx.totalElements}` : '',
+      txPageLabel: tx ? `Page ${tx.page + 1} of ${tx.totalPages}` : '',
+      txPrevDisabled: !tx || tx.first, txNextDisabled: !tx || tx.last, txPrev: this.txPrev, txNext: this.txNext,
+
+      // modal
+      modalOpen: !!modal,
+      modalTitle: modalTitles[modal] || '',
+      modalFormShown: !!modal && !s.modalResult,
+      isTransfer: modal === 'transfer', isOpen: modal === 'open',
+      showAmount: modal === 'deposit' || modal === 'withdraw' || modal === 'transfer',
+      modalAmount: s.modalAmount, onModalAmount: this.onModalAmount,
+      modalDest: s.modalDest, onModalDest: this.onModalDest,
+      modalType: s.modalType, onModalType: this.onModalType,
+      modalSource: s.modalSource, onModalSource: this.onModalSource, sourceOptions,
+      modalBusy: s.modalBusy, modalError: s.modalError,
+      isConflict: s.modalErrorCode === 'CONCURRENCY_CONFLICT',
+      submitLabel: submitLabels[modal] || 'Confirm', submitColor: submitColors[modal] || 'var(--accent)',
+      submitModal: this.submitModal, retryModal: this.retryModal, closeModal: this.closeModal,
+      onOverlayClick: this.onOverlayClick, onOverlayKey: this.onOverlayKey, stop: this.stop,
+      demoDestHint: (s.useMock && this.client && this.client.mock) ? this.client.mock.demoDestId : null,
+      modalResult: s.modalResult,
+      resultTitle: resultVerb,
+      resultReplayed: s.modalResult && s.modalResult.replayed,
+      resultBalanceLabel: modal === 'transfer' ? 'Source balance' : 'New balance',
+      resultBalanceUSD: s.modalResult ? this.fmtUSD(s.modalResult.balance) : '',
+
+      // admin
+      adminQuery: s.admin.query, onAdminQuery: this.onAdminQuery, adminLookup: this.adminLookup,
+      adminLoading: s.admin.loading, adminError: s.admin.error, adminAccount: !!adminAcct, adminAcct,
+      freezeLabel: adminStatus === 'FROZEN' ? 'Unfreeze account' : 'Freeze account',
+      adminClosed: adminStatus === 'CLOSED',
+      adminFreezeClick: this.adminFreezeClick, adminCloseClick: this.adminCloseClick,
+      confirmOpen: !!confirm, confirmTitle: confirm && confirm.title, confirmBody: confirm && confirm.body,
+      confirmActionLabel: confirm && confirm.action, confirmColor: confirm && confirm.color,
+      confirmBusy: s.admin.busy, doConfirm: this.doConfirm, cancelConfirm: this.cancelConfirm,
+
+      // settings
+      settingsOpen: s.settingsOpen, closeSettings: this.closeSettings, applySettings: this.applySettings,
+      useMock: s.useMock, toggleMock: this.toggleMock, baseUrl: s.baseUrl, onBaseUrl: this.onBaseUrl,
+
+      toasts,
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+# Satır sonlarını normalize et: repoda LF, checkout'ta platforma göre
+* text=auto
+
+# Script'ler her zaman LF olmalı
+*.sh text eol=lf
+mvnw text eol=lf
+
+# Windows script'leri CRLF
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# İkili dosyalar
+*.jar binary
+*.png binary
+*.jpg binary
+*.pdf binary

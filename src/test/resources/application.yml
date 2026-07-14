@@ -1,0 +1,25 @@
+# Test overrides. The integration tests exercise heavy single-row contention, so we
+# allow generous retries: the point of the concurrency test is to prove NO lost
+# updates occur, not to exercise the (lower) production retry bound.
+banking:
+  optimistic-lock:
+    max-retries: 100
+    backoff-base-millis: 5
+  security:
+    login:
+      # Low threshold so the brute-force test is quick; long block so it stays blocked.
+      max-attempts: 3
+      block-minutes: 60
+
+spring:
+  # Tests never talk to Vault; the datasource comes from Testcontainers.
+  cloud:
+    vault:
+      enabled: false
+  jpa:
+    # Match the main config: no lazy loading during view rendering.
+    open-in-view: false
+  datasource:
+    hikari:
+      # Enough connections for the concurrent-transfer test to run with real parallelism.
+      maximum-pool-size: 20
