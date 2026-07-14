@@ -1,214 +1,234 @@
 # Kredi Analiz — Akış & Tasarım Dokümanı
 
 > **Durum:** Taslak (design review için) · **Dal:** `feature/kredi-analiz`
-> **Amaç:** Bir müşterinin başvurduğu kredi talebinin, mevcut hesap/işlem verilerine
-> dayanarak otomatik değerlendirilmesi (skorlama + karar) için akışı tanımlamak.
-> Bu doküman **implementasyon içermez**; implementasyon ayrı bir dalda
-> (`feature/kredi-analiz-impl`) yapılacaktır.
+> **Amaç:** Bir müşterinin kredi başvurusunun; **atanmış bir bankacı** tarafından
+> gerçek bir underwriting (kredi tahsis) sürecine benzer şekilde değerlendirilmesi,
+> onaylanırsa paranın müşterinin hesabına aktarılması ve müşteriye bir **geri ödeme
+> planı** (taksit tablosu) sunulması.
+>
+> Bu doküman **implementasyon içermez**; implementasyon `feature/kredi-analiz-impl`
+> dalında yapılır. Akış, gerçek TR banka kredi süreçleri araştırılarak tasarlanmıştır
+> (bkz. §11 Kaynaklar).
 
 ---
 
-## 1. Kapsam
+## 1. Roller
 
-### Yapılacaklar (in-scope)
-- Müşteri bir **kredi başvurusu** (`CreditApplication`) oluşturur: talep edilen tutar, vade.
-- Sistem, müşterinin mevcut verilerinden bir **kredi skoru** hesaplar.
-- Skora ve kurallara göre otomatik bir **karar** verilir: `APPROVED` / `REJECTED` /
-  `MANUAL_REVIEW`.
-- Başvuru ve karar kalıcı olarak saklanır ve denetlenebilir (audit) olur.
+| Rol | Yetki |
+|-----|-------|
+| **CUSTOMER** | Kredi başvurusu yapar, kendi başvurularını ve geri ödeme planını görür. |
+| **BANKER** (yeni) | Yalnızca **kendisine atanmış** müşterilerin başvurularını görür ve değerlendirir (onay/ret). |
+| **ADMIN** | Tüm başvuruları görür; bankacı–müşteri atamalarını yönetir/denetler. |
 
-### Yapılmayacaklar (out-of-scope, bu iterasyon)
-- Gerçek kredi tahsisi / para aktarımı (onaylanınca hesaba yatırma) — ayrı bir iş.
-- Harici kredi bürosu (KKB vb.) entegrasyonu — ileride bir `out` portu olarak eklenebilir.
-- Makine öğrenmesi tabanlı skorlama — ilk sürüm **kural tabanlı**.
+> `CustomerRole` enum'ına `BANKER` eklenir. Yetkilendirme mevcut Spring Security
+> `hasRole(...)` deseniyle yapılır; bankacının "sadece kendi müşterisi" kısıtı ayrıca
+> servis katmanında (`BankerAccessGuard`) zorlanır — tıpkı `AccountAccessGuard` gibi.
 
----
-
-## 2. Domain Kavramları
-
-Mevcut mimari **hexagonal (ports & adapters)**. Yeni kavramlar aynı katmanlara oturur:
-
-| Kavram | Katman | Açıklama |
-|--------|--------|----------|
-| `CreditApplication` | `domain/model` | Başvuru: müşteri, tutar, vade, durum, karar, skor. |
-| `CreditDecision` (enum) | `domain` | `APPROVED`, `REJECTED`, `MANUAL_REVIEW`. |
-| `CreditApplicationStatus` (enum) | `domain` | `SUBMITTED`, `EVALUATED`. |
-| `CreditScore` | `domain/model` (value) | 0–1000 arası skor + gerekçe kalemleri. |
-
-### Skorlama girdileri (mevcut veriden türetilir)
-- Müşterinin toplam bakiyesi (tüm `Account`'ların toplamı).
-- Son N günlük işlem hacmi / düzenliliği (`LedgerEntry`).
-- Hesap yaşı (`Customer.createdAt`).
-- Müşteri durumu (`CustomerStatus.ACTIVE` değilse otomatik `REJECTED`).
+### Bankacı–Müşteri Ataması (random)
+- Her **yeni müşteri kaydında** (`CustomerService.register`), sistemdeki BANKER rolüne
+  sahip kullanıcılardan **rastgele biri** müşteriye atanır (`customer_banker_assignment`).
+- Atama yoksa (hiç bankacı yoksa) kayıt yine de başarılı olur; başvuru anında tekrar
+  atama denenir. Bankacı ekipleri arasında yük dağılımı için random seçim kullanılır.
 
 ---
 
-## 3. Akış (Sequence)
+## 2. Başvuru Alanları
+
+Müşteri başvuruda şunları verir/beyan eder:
+
+| Alan | Açıklama |
+|------|----------|
+| `productCode` | Seçilen **kredi ürünü** (ör. `IHTIYAC`, `TASIT`) — faiz oranı ve limit taşır. |
+| `amount` | Talep edilen kredi tutarı. |
+| `termMonths` | Vade (ay). |
+| `monthlyIncome` | Beyan edilen aylık net gelir. |
+| `profession` | Meslek. |
+| `employmentMonths` | Aynı işte kaç aydır çalıştığı. |
+| `disbursementAccountId` | Onaylanırsa paranın yatırılacağı kendi hesabı. |
+
+---
+
+## 3. Uçtan Uca Akış
 
 ```
-Müşteri                API (Controller)         CreditService          Repository/Portlar
-  |                          |                        |                        |
-  |  POST /credit-applications                        |                        |
-  |------------------------->|                        |                        |
-  |                          |  submit(cmd)           |                        |
-  |                          |----------------------->|                        |
-  |                          |                        | müşteri/hesap/ledger oku|
-  |                          |                        |----------------------->|
-  |                          |                        |<-----------------------|
-  |                          |                        | score = calculate(...) |
-  |                          |                        | decision = decide(score)|
-  |                          |                        | save(application)      |
-  |                          |                        |----------------------->|
-  |                          |  CreditApplicationView |                        |
-  |                          |<-----------------------|                        |
-  |  201 Created + karar     |                        |                        |
-  |<-------------------------|                        |                        |
+1) CUSTOMER  ── POST /api/credit-applications ─────────────►  başvuru (status=SUBMITTED)
+                 (gelir, meslek, çalışma süresi, ürün, tutar, vade)
+                 └─ sistem: atanmış bankacıya yönlendirir + ön-metrikleri hesaplar
+                    (aylık taksit, taksit/gelir oranı) — KARAR VERMEZ
+
+2) BANKER    ── GET  /api/banker/credit-applications ──────►  kendi kuyruğu (SUBMITTED)
+             ── GET  /api/banker/credit-applications/{id} ─►  detay + underwriting kriterleri
+             ── POST .../{id}/approve  |  .../{id}/reject ─►  KARAR
+
+3) Onay      ── sistem: MoneyMovementService ile parayı müşterinin hesabına aktarır
+                 (OperationType.CREDIT_DISBURSEMENT) → status=APPROVED, disbursedAt set
+                 └─ geri ödeme planı üretilir (anüite)
+
+4) CUSTOMER  ── GET /api/accounts/{id}/statement ──────────►  krediyi transaction geçmişinde görür
+             ── GET /api/credit-applications/{id}/repayment-plan ► taksit tablosu (mevzuat)
 ```
 
-Değerlendirme **senkron** yapılır (ilk sürüm): başvuru anında skor+karar döner.
-İleride ağır hesaplama gerekirse asenkron kuyruk (`SUBMITTED` → arka planda `EVALUATED`)
-modeline geçilebilir; durum makinesi buna uygun tasarlandı.
+Değerlendirme **manuel** (bankacı kararı). Sistem otomatik onay/ret vermez; yalnızca
+bankacıya **karar destek metrikleri** sunar.
 
 ---
 
-## 4. Portlar (Hexagonal)
+## 4. Underwriting Kriterleri (bankacı ekranında görünür)
 
-### Giriş portları (`application/port/in`)
-```java
-public interface SubmitCreditApplicationUseCase {
-    CreditApplicationResult submit(SubmitCreditApplicationCommand command);
-}
-public interface GetCreditApplicationUseCase {
-    CreditApplicationResult getById(Long applicationId, Long requestingCustomerId);
-}
-```
+Araştırmadan çıkan gerçek TR banka kuralları temel alınır:
 
-### Çıkış portları (`application/port/out`)
-```java
-public interface CreditApplicationRepository {
-    CreditApplication save(CreditApplication application);
-    Optional<CreditApplication> findById(Long id);
-    List<CreditApplication> findByCustomerId(Long customerId);
-}
-// Skorlama, test edilebilir ve değiştirilebilir olsun diye ayrı bir port:
-public interface CreditScoringPolicy {
-    CreditScore score(CreditScoringInputs inputs);
-}
-```
+| Kriter | Kural / Gösterim | Kaynak |
+|--------|------------------|--------|
+| **Taksit/Gelir oranı** | Aylık taksit ≤ aylık gelirin **%50**'si (aşarsa kırmızı bayrak) | Tüm TR bankaları |
+| **Çalışma süresi** | Aynı işte ≥ **3 ay** (özel sektör tipik alt sınır) | Genel şart |
+| **Ürün limiti** | `amount` ürünün min/max limitleri içinde | Ürün tanımı |
+| **Aylık taksit** | Anüite formülüyle hesaplanır (bkz. §6) | — |
+| **Toplam maliyet** | Taksit × vade; toplam faiz = toplam − anapara | — |
+| **Müşteri durumu** | `ACTIVE` değilse başvuru reddedilmeli | — |
 
-Bu ayrım sayesinde skorlama kuralları (`CreditScoringPolicy`) ileride harici bir servise
-(adapter değişikliği) taşınabilir; `application/service` katmanı değişmez.
+Bu metrikler **öneri**dir; nihai karar bankacınındır. Kriterler `banking.credit.*`
+altında konfigüre edilebilir (taksit/gelir eşiği, min çalışma ayı vb.).
 
 ---
 
-## 5. Skorlama & Karar Kuralları (ilk sürüm, kural tabanlı)
+## 5. Durum Makinesi
 
-Skor 0–1000. Örnek ağırlıklar (design review'da netleşecek):
+```
+        submit()                approve()  ──► disbursement + repayment plan
+SUBMITTED ───────► (bankacı) ──┤
+                                └► reject()  ──► (para hareketi yok)
 
-| Kriter | Katkı |
-|--------|-------|
-| Toplam bakiye ≥ talep tutarının 3 katı | +300 |
-| Hesap yaşı ≥ 6 ay | +200 |
-| Son 90 günde düzenli para girişi | +250 |
-| Negatif/şüpheli işlem yok | +150 |
-| Taban puan | +100 |
-
-**Karar eşiği:**
-- `score ≥ 700` → **APPROVED**
-- `400 ≤ score < 700` → **MANUAL_REVIEW**
-- `score < 400` veya müşteri `ACTIVE` değil → **REJECTED**
-
-> Not: Eşikler ve ağırlıklar `application.yml`'de konfigüre edilebilir olacak
-> (`banking.credit.*`), tıpkı mevcut `banking.security.*` gibi.
+Durumlar: SUBMITTED → APPROVED | REJECTED   (APPROVED/REJECTED terminal)
+```
 
 ---
 
-## 6. Veri Modeli (Flyway migration taslağı)
+## 6. Taksit & Geri Ödeme Planı (Anüite)
 
-Yeni tablo — sıradaki migration `V9__create_credit_application.sql`:
+Eşit taksitli (anüite) yöntem — tüm TR bankalarının ihtiyaç kredisi standardı:
+
+```
+Aylık taksit:  T = A · r·(1+r)^n / ((1+r)^n − 1)
+  A = anapara (kredi tutarı), r = aylık faiz oranı, n = vade (ay)
+r = 0 ise:      T = A / n
+```
+
+**Amortisman tablosu** her taksit için: faiz payı = kalan anapara · r; anapara payı =
+T − faiz payı; kalan anapara güncellenir. İlk aylarda faiz payı yüksek, sonlara doğru
+anapara payı artar. Son taksitte yuvarlama farkı düzeltilir (kalan = 0).
+
+Hesap `BigDecimal` ile yapılır (mevcut `Money` deseni, HALF_UP, 2 ondalık).
+
+---
+
+## 7. Veri Modeli (Flyway migration'ları)
+
+Sıradaki numaralar (mevcut son migration V8):
+
+- **V9 — `credit_product`**: `code (PK-ish, unique)`, `name`, `annual_interest_rate`,
+  `min_amount`, `max_amount`, `max_term_months`. Seed: IHTIYAC, TASIT.
+- **V10 — `customer.role` CHECK güncelle**: `('CUSTOMER','BANKER','ADMIN')`.
+- **V11 — `customer_banker_assignment`**: `customer_id (unique)`, `banker_id`, `assigned_at`.
+- **V12 — `credit_application`**: aşağıdaki alanlar.
+- **V13 — seed banker kullanıcılar** (2 bankacı) — demo/dev için.
 
 ```sql
 CREATE TABLE credit_application (
-    id              BIGSERIAL PRIMARY KEY,
-    customer_id     BIGINT NOT NULL REFERENCES customer(id),
-    amount          NUMERIC(19,2) NOT NULL,
-    term_months     INTEGER NOT NULL,
-    score           INTEGER,
-    decision        VARCHAR(20),       -- APPROVED | REJECTED | MANUAL_REVIEW
-    status          VARCHAR(20) NOT NULL, -- SUBMITTED | EVALUATED
-    created_at      TIMESTAMP NOT NULL,
-    version         BIGINT NOT NULL DEFAULT 0
+    id                       BIGSERIAL PRIMARY KEY,
+    customer_id              BIGINT NOT NULL REFERENCES customer(id),
+    banker_id                BIGINT REFERENCES customer(id),   -- değerlendiren bankacı
+    product_code             VARCHAR(30) NOT NULL,
+    amount                   NUMERIC(19,2) NOT NULL,
+    term_months              INTEGER NOT NULL,
+    annual_interest_rate     NUMERIC(9,6) NOT NULL,            -- başvuru anında ürün oranı
+    monthly_income           NUMERIC(19,2) NOT NULL,
+    profession               VARCHAR(120) NOT NULL,
+    employment_months        INTEGER NOT NULL,
+    disbursement_account_id  BIGINT REFERENCES account(id),
+    monthly_installment      NUMERIC(19,2),                    -- hesaplanan taksit
+    status                   VARCHAR(20) NOT NULL,             -- SUBMITTED|APPROVED|REJECTED
+    decision_reason          VARCHAR(500),
+    created_at               TIMESTAMP NOT NULL,
+    decided_at               TIMESTAMP,
+    disbursed_at             TIMESTAMP,
+    version                  BIGINT NOT NULL DEFAULT 0
 );
-CREATE INDEX idx_credit_application_customer ON credit_application(customer_id);
 ```
 
----
-
-## 7. API Uç Noktaları
-
-| Method | Path | Yetki | Açıklama |
-|--------|------|-------|----------|
-| `POST` | `/credit-applications` | CUSTOMER | Yeni başvuru + anlık karar. |
-| `GET`  | `/credit-applications/{id}` | Sahip müşteri veya ADMIN | Başvuru detayını getir. |
-| `GET`  | `/credit-applications` | CUSTOMER | Müşterinin kendi başvuruları. |
-| `GET`  | `/admin/credit-applications?decision=MANUAL_REVIEW` | ADMIN | Manuel inceleme kuyruğu. |
-
-**İstek örneği:**
-```json
-POST /credit-applications
-{ "amount": 50000.00, "termMonths": 12 }
-```
-**Yanıt örneği:**
-```json
-{
-  "id": 42,
-  "amount": 50000.00,
-  "termMonths": 12,
-  "score": 750,
-  "decision": "APPROVED",
-  "status": "EVALUATED",
-  "reasons": ["Yeterli bakiye", "Hesap yaşı > 6 ay"]
-}
-```
+Geri ödeme planı **türetilir** (kalıcı saklanmaz; başvurunun tutar/oran/vade'sinden
+her istekte hesaplanır). İleride sözleşme dondurma gerekirse ayrı tabloya alınabilir.
 
 ---
 
-## 8. Çapraz Kesen Konular
+## 8. API Uç Noktaları (mevcut `/api` prefix'i ile)
 
-- **Güvenlik / RBAC:** Mevcut `SecurityConfig` + `AccountAccessGuard` deseni izlenir;
-  müşteri yalnızca kendi başvurusunu görür, `/admin/**` yalnızca `ADMIN`.
-- **Idempotency:** `POST /credit-applications` mevcut `IdempotencyRecord` mekanizmasıyla
-  `Idempotency-Key` başlığını destekler (çift başvuru önleme).
-- **Audit:** Her karar mevcut `OperationLogEntry` altyapısıyla loglanır
-  (`OperationType.CREDIT_DECISION` eklenir).
-- **Concurrency:** `@Version` optimistic lock deseni `CreditApplication`'da da kullanılır.
-- **Validation:** Tutar > 0, vade 1–60 ay; mevcut `ValidationException` ile.
-
----
-
-## 9. Test Stratejisi (implementasyon dalında)
-
-- **Birim:** `CreditScoringPolicy` kural testleri (sınır değerler: 399/400/699/700).
-- **Entegrasyon (Testcontainers):** başvuru → karar → DB'de kayıt akışı; RBAC (başkasının
-  başvurusunu görememe); idempotency (aynı key ile tek kayıt).
-- Mevcut `AbstractIntegrationTest` altyapısı yeniden kullanılır.
+| Method | Path | Rol | Açıklama |
+|--------|------|-----|----------|
+| `GET`  | `/api/credit-products` | CUSTOMER | Seçilebilir kredi ürünleri. |
+| `POST` | `/api/credit-applications` | CUSTOMER | Başvuru (Idempotency-Key destekli). |
+| `GET`  | `/api/credit-applications` | CUSTOMER | Müşterinin kendi başvuruları. |
+| `GET`  | `/api/credit-applications/{id}` | Sahip müşteri | Başvuru detayı. |
+| `GET`  | `/api/credit-applications/{id}/repayment-plan` | Sahip müşteri | Taksit tablosu. |
+| `GET`  | `/api/banker/credit-applications` | BANKER | Kendi müşterilerinin SUBMITTED kuyruğu. |
+| `GET`  | `/api/banker/credit-applications/{id}` | BANKER | Detay + underwriting kriterleri. |
+| `POST` | `/api/banker/credit-applications/{id}/approve` | BANKER | Onay → disbursement. |
+| `POST` | `/api/banker/credit-applications/{id}/reject` | BANKER | Ret (+ gerekçe). |
+| `GET`  | `/api/admin/credit-applications` | ADMIN | Tüm başvurular. |
 
 ---
 
-## 10. Uygulama Adımları (implementasyon dalı için checklist)
+## 9. Çapraz Kesen Konular
 
-1. `domain`: `CreditApplication`, `CreditDecision`, `CreditApplicationStatus`, `CreditScore`.
-2. `port/out`: `CreditApplicationRepository`, `CreditScoringPolicy`.
-3. `port/in`: `SubmitCreditApplicationUseCase`, `GetCreditApplicationUseCase`.
-4. `application/service`: `CreditService` + `RuleBasedCreditScoringPolicy`.
-5. `adapter/out/persistence`: JPA entity + repository adapter.
-6. `adapter/in/web`: `CreditController` + DTO'lar.
-7. `resources/db/migration`: `V9__create_credit_application.sql`.
-8. `config`: `banking.credit.*` özellikleri.
-9. Testler (bkz. §9).
+- **Güvenlik/RBAC:** `BANKER` rolü `SecurityConfig`'e eklenir (`/api/banker/**` →
+  `hasRole("BANKER")`). Bankacı yalnızca kendine atanmış müşterinin başvurusuna erişir
+  (`BankerAccessGuard`, ihlalde 404 — enumerasyonu önler, `AccountAccessGuard` gibi).
+- **Disbursement:** Onayda para hareketi mevcut `MoneyMovementService` double-entry
+  altyapısıyla, EXTERNAL_CASH karşı-bacağıyla yapılır → yeni `OperationType.CREDIT_DISBURSEMENT`.
+  Böylece kredi, müşterinin **transaction geçmişinde** görünür.
+- **Idempotency:** `POST /api/credit-applications` ve approve, mevcut `IdempotencyRecord`
+  mekanizmasıyla çift işlem/çift ödeme önler.
+- **Audit:** Her karar + disbursement mevcut `OperationLogEntry` ile loglanır.
+- **Concurrency:** `CreditApplication` `@Version` optimistic lock; iki bankacının aynı
+  başvuruyu aynı anda karara bağlaması engellenir.
+- **Validation:** tutar > 0 ve ürün limitinde; vade 1..product.maxTerm; gelir > 0;
+  employmentMonths ≥ 0. Mevcut `ValidationException`/`GlobalExceptionHandler`.
 
 ---
 
-**Sonraki adım:** Bu taslak `feature/kredi-analiz` dalından bir Pull Request ile ekibe
-sunulur. Onay/geri bildirim sonrası implementasyon `feature/kredi-analiz-impl` dalında
-bu checklist izlenerek yapılır.
+## 10. İmplementasyon Checklist (impl dalı)
+
+1. `domain`: `CustomerRole.BANKER`; `CreditApplication`, `CreditApplicationStatus`,
+   `CreditProduct`, `CustomerBankerAssignment`; `RepaymentPlan`/`Installment` (value) +
+   `Annuity` hesaplayıcı; `OperationType.CREDIT_DISBURSEMENT`.
+2. `port/out`: `CreditApplicationRepository`, `CreditProductRepository`,
+   `BankerAssignmentRepository`.
+3. `port/in`: `SubmitCreditApplicationUseCase`, `GetCreditApplicationUseCase`,
+   `ListCreditApplicationsUseCase`, `EvaluateCreditApplicationUseCase`,
+   `GetRepaymentPlanUseCase`, `ListCreditProductsUseCase`.
+4. `application/service`: `CreditApplicationService`, `CreditEvaluationService`
+   (disbursement dahil), `BankerAssignmentService`, `RepaymentPlanCalculator`,
+   `BankerAccessGuard`.
+5. `adapter/out/persistence`: JPA entity + repository adapter'lar.
+6. `adapter/in/web`: `CreditController`, `BankerCreditController` + DTO'lar.
+7. `resources/db/migration`: V9–V13.
+8. `infrastructure/security`: `SecurityConfig` BANKER yetkileri.
+9. `config`: `banking.credit.*`.
+10. Testler (§9 kuralları + uçtan uca akış, RBAC, idempotency).
+
+---
+
+## 11. Kaynaklar (araştırma)
+
+- [Kredi Başvuru Süreci — Hesapkurdu](https://www.hesapkurdu.com/ihtiyac-kredisi/rehber/kredi-basvuru-sureci)
+- [Kredi Başvurusu Nasıl Değerlendirilir? — Kobitek](https://kobitek.com/kredi-basvurusu-nasil-degerlendirilir)
+- [Kredi Çekme Şartları — Hesapkurdu](https://www.hesapkurdu.com/ihtiyac-kredisi/rehber/kredi-cekme-sartlari)
+- [Kredi Taksit Hesaplama (anüite) — HesapMod](https://www.hesapmod.com/finansal-hesaplamalar/kredi-taksit-hesaplama)
+- [Kredi Hesaplama Formülü/Matematiği — KrediModeli](https://www.kredimodeli.com/makaleler/KrediHesaplama)
+- [Loan Origination Process — FICO](https://www.fico.com/en/glossary/loan-originations-and-onboarding)
+- [10 Stages in the Loan Origination Process — CloudBankin](https://cloudbankin.com/blog/loan-origination/10-stages-in-the-loan-origination-process/)
+
+---
+
+**Not (yorum):** Başvuruda "kart seçimi", para hesaba aktarılıp taksitle geri ödendiği
+için **kredi ürünü/türü seçimi** olarak modellenmiştir. Farklı bir anlam (ör. gerçek
+kredi kartı ürünü) kastedildiyse review'da güncellenecektir.
