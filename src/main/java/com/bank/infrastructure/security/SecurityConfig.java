@@ -74,6 +74,8 @@ public class SecurityConfig {
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         // Administrative endpoints require the ADMIN role.
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // Banker endpoints (credit evaluation) require the BANKER role.
+                        .requestMatchers("/api/banker/**").hasRole("BANKER")
                         // Everything else requires an authenticated customer.
                         .anyRequest().authenticated())
                 .httpBasic(Customizer.withDefaults())

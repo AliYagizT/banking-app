@@ -14,4 +14,12 @@ public class NotFoundException extends BankingException {
     public static NotFoundException account(Long accountId) {
         return new NotFoundException("Account not found: " + accountId);
     }
+
+    public static NotFoundException creditApplication(Long applicationId) {
+        return new NotFoundException("Credit application not found: " + applicationId);
+    }
+
+    public static NotFoundException creditProduct(String productCode) {
+        return new NotFoundException("Credit product not found: " + productCode);
+    }
 }
