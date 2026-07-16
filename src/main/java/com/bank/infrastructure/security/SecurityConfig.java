@@ -1,6 +1,7 @@
 package com.bank.infrastructure.security;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.bank.application.port.out.CustomerRepository;
+import com.bank.application.port.out.TokenVerifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,10 +10,8 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -21,17 +20,19 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * HTTP Basic security. Customers authenticate with their email + password on every
- * request (stateless: no sessions, no CSRF tokens). Key protections wired here:
+ * Stateless, token-based security. Clients authenticate with a Firebase ID token in an
+ * {@code Authorization: Bearer <token>} header; {@link BearerTokenAuthenticationFilter}
+ * verifies it and resolves the caller's identity and role from the database. Key points:
  * <ul>
- *   <li><b>Per-user credentials only</b> — there is no shared/embedded API key, so a
- *       browser or mobile client never has to carry a secret.</li>
- *   <li><b>Role-based access</b> — {@code /api/admin/**} requires the ADMIN role; a
- *       customer may otherwise only reach their own resources (enforced per-request by
- *       {@code AccountAccessGuard}).</li>
- *   <li><b>Brute-force guard</b> — a per-IP failed-login limiter runs before auth.</li>
- *   <li><b>CORS</b> — cross-origin requests are denied unless the origin is explicitly
- *       allow-listed via configuration.</li>
+ *   <li><b>No passwords in the backend</b> — Firebase owns credentials; the app only
+ *       verifies tokens and maps the email to a customer row.</li>
+ *   <li><b>Role-based access</b> — {@code /api/admin/**} needs ADMIN, {@code /api/banker/**}
+ *       needs BANKER; other endpoints need a registered customer. Per-resource ownership is
+ *       enforced in the service layer (account/banker access guards).</li>
+ *   <li><b>Registration</b> — {@code POST /api/customers} only needs a verified token (a
+ *       not-yet-registered "prospect"), so a signed-in Firebase user can create their
+ *       profile; the email comes from the token, never the request body.</li>
+ *   <li><b>CORS</b> — cross-origin requests are denied unless the origin is allow-listed.</li>
  * </ul>
  */
 @Configuration
@@ -39,52 +40,46 @@ public class SecurityConfig {
 
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
     private final RestAccessDeniedHandler accessDeniedHandler;
-    private final LoginAttemptService loginAttemptService;
-    private final ObjectMapper objectMapper;
+    private final TokenVerifier tokenVerifier;
+    private final CustomerRepository customerRepository;
     private final String allowedOrigins;
 
     public SecurityConfig(RestAuthenticationEntryPoint authenticationEntryPoint,
                           RestAccessDeniedHandler accessDeniedHandler,
-                          LoginAttemptService loginAttemptService,
-                          ObjectMapper objectMapper,
+                          TokenVerifier tokenVerifier,
+                          CustomerRepository customerRepository,
                           @Value("${banking.security.cors.allowed-origins:}") String allowedOrigins) {
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.accessDeniedHandler = accessDeniedHandler;
-        this.loginAttemptService = loginAttemptService;
-        this.objectMapper = objectMapper;
+        this.tokenVerifier = tokenVerifier;
+        this.customerRepository = customerRepository;
         this.allowedOrigins = allowedOrigins;
-    }
-
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .cors(Customizer.withDefaults())
-                // Stateless REST API authenticated per-request: CSRF tokens are not applicable.
+                // Stateless REST API authenticated per-request by bearer token: CSRF N/A.
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Registration is open so a new customer can create an account to log in with.
-                        .requestMatchers(HttpMethod.POST, "/api/customers").permitAll()
                         // API documentation is public.
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        // Registration: a verified (possibly not-yet-registered) caller creates their profile.
+                        .requestMatchers(HttpMethod.POST, "/api/customers").authenticated()
                         // Administrative endpoints require the ADMIN role.
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        // Banker endpoints (credit evaluation) require the BANKER role.
+                        // Banker (credit evaluation) endpoints require the BANKER role.
                         .requestMatchers("/api/banker/**").hasRole("BANKER")
-                        // Everything else requires an authenticated customer.
-                        .anyRequest().authenticated())
-                .httpBasic(Customizer.withDefaults())
+                        // Everything else requires a registered customer (not a bare prospect).
+                        .anyRequest().hasAnyRole("CUSTOMER", "BANKER", "ADMIN"))
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
-                // Reject blocked IPs before their credentials are even checked.
-                .addFilterBefore(new BruteForceGuardFilter(loginAttemptService, objectMapper),
-                        BasicAuthenticationFilter.class);
+                .addFilterBefore(
+                        new BearerTokenAuthenticationFilter(tokenVerifier, customerRepository, authenticationEntryPoint),
+                        UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 

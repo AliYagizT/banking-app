@@ -34,7 +34,7 @@ class ConcurrentTransferIT extends AbstractIntegrationTest {
 
     private Account newAccount() {
         var customer = customerService.register(
-                "Conc User", "conc-" + UUID.randomUUID() + "@example.com", "password123");
+                "Conc User", "conc-" + UUID.randomUUID() + "@example.com");
         return accountService.openAccount(customer.getId(), "USD");
     }
 

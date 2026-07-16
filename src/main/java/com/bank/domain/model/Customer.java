@@ -29,8 +29,12 @@ public class Customer {
     @Column(name = "email", nullable = false, length = 320)
     private String email;
 
-    /** BCrypt hash of the customer's password. The raw password is never stored. */
-    @Column(name = "password_hash", nullable = false, length = 100)
+    /**
+     * Legacy password hash column. Credentials now live in the external identity provider
+     * (Firebase), so this is null for customers created under token auth. Kept nullable for
+     * backward compatibility with rows seeded before the migration to Firebase.
+     */
+    @Column(name = "password_hash", length = 100)
     private String passwordHash;
 
     @Enumerated(EnumType.STRING)
@@ -52,10 +56,10 @@ public class Customer {
         // Required by JPA.
     }
 
-    public Customer(String fullName, String email, String passwordHash) {
+    /** Create a customer whose credentials live in the external identity provider (no password stored). */
+    public Customer(String fullName, String email) {
         this.fullName = fullName;
         this.email = email;
-        this.passwordHash = passwordHash;
         this.status = CustomerStatus.ACTIVE;
         this.role = CustomerRole.CUSTOMER;
     }

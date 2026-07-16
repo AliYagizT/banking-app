@@ -37,11 +37,13 @@ public class CustomerController {
     }
 
     @PostMapping
-    @Operation(summary = "Register a customer (public)")
-    public ResponseEntity<CustomerResponse> create(@Valid @RequestBody CreateCustomerRequest request,
+    @Operation(summary = "Create your customer profile (email comes from your verified token)")
+    public ResponseEntity<CustomerResponse> create(@AuthenticationPrincipal CustomerPrincipal principal,
+                                                   @Valid @RequestBody CreateCustomerRequest request,
                                                    UriComponentsBuilder uriBuilder) {
-        Customer customer = registerCustomerUseCase.register(
-                request.fullName(), request.email(), request.password());
+        // The email is taken from the verified token, never the request body, so a caller
+        // cannot register a profile for an address they don't control.
+        Customer customer = registerCustomerUseCase.register(request.fullName(), principal.getEmail());
         URI location = uriBuilder.path("/api/customers/{id}").buildAndExpand(customer.getId()).toUri();
         return ResponseEntity.created(location).body(CustomerResponse.from(customer));
     }

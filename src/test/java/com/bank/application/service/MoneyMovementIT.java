@@ -40,7 +40,7 @@ class MoneyMovementIT extends AbstractIntegrationTest {
 
     private Account newAccount() {
         var customer = customerService.register(
-                "Test User", "user-" + UUID.randomUUID() + "@example.com", "password123");
+                "Test User", "user-" + UUID.randomUUID() + "@example.com");
         return accountService.openAccount(customer.getId(), "USD");
     }
 

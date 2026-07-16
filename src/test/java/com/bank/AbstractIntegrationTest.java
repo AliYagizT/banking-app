@@ -1,6 +1,8 @@
 package com.bank;
 
+import com.bank.support.TestSecurityConfig;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -20,6 +22,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * <p>Requires a running Docker daemon; without one, Testcontainers fails fast.
  */
 @SpringBootTest
+@Import(TestSecurityConfig.class)
 public abstract class AbstractIntegrationTest {
 
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
