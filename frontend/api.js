@@ -102,4 +102,7 @@ export const api = {
   adminGetAccount: (id) => request("GET", `/api/admin/accounts/${id}`),
   adminFreeze: (id) => request("POST", `/api/admin/accounts/${id}/freeze`),
   adminClose: (id) => request("POST", `/api/admin/accounts/${id}/close`),
+  adminUsers: () => request("GET", "/api/admin/users"),
+  adminAddBanker: (payload) => request("POST", "/api/admin/bankers", { body: payload }),
+  adminOperations: (limit = 100) => request("GET", `/api/admin/operations?limit=${limit}`),
 };

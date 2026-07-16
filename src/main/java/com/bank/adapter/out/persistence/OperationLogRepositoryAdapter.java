@@ -2,8 +2,10 @@ package com.bank.adapter.out.persistence;
 
 import com.bank.application.port.out.OperationLogRepository;
 import com.bank.domain.model.OperationLogEntry;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -30,5 +32,10 @@ public class OperationLogRepositoryAdapter implements OperationLogRepository {
     @Override
     public long countByPrimaryAccountId(Long primaryAccountId) {
         return jpa.countByPrimaryAccountId(primaryAccountId);
+    }
+
+    @Override
+    public List<OperationLogEntry> findRecent(int limit) {
+        return jpa.findAllByOrderByCreatedAtDescIdDesc(PageRequest.of(0, Math.max(1, limit)));
     }
 }

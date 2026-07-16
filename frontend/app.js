@@ -455,6 +455,97 @@ function BankerDetail({ data, onBack, onDecide }) {
 
 // ---------- admin ----------
 function AdminPanel({ notify }) {
+  const sections = [["users", "Kullanıcılar"], ["logs", "İşlem logları"], ["accounts", "Hesaplar"]];
+  const [section, setSection] = useState("users");
+  return html`<div>
+    <h2>Admin paneli</h2>
+    <div className="subtabs">
+      ${sections.map(([k, label]) => html`<button key=${k}
+        className=${"subtab" + (section === k ? " active" : "")} onClick=${() => setSection(k)}>${label}</button>`)}
+    </div>
+    ${section === "users" && html`<${AdminUsers} notify=${notify} />`}
+    ${section === "logs" && html`<${AdminLogs} notify=${notify} />`}
+    ${section === "accounts" && html`<${AdminAccounts} notify=${notify} />`}
+  </div>`;
+}
+
+function AdminUsers({ notify }) {
+  const [users, setUsers] = useState(null);
+  const load = useCallback(async () => {
+    try { setUsers(await api.adminUsers()); }
+    catch (e) { notify(e.friendly, "error"); }
+  }, [notify]);
+  useEffect(() => { load(); }, [load]);
+
+  return html`<div>
+    <${AddBankerForm} notify=${notify} onDone=${load} />
+    <h3>Tüm kullanıcılar ${users ? html`<span className="muted">(${users.length})</span>` : ""}</h3>
+    ${!users ? html`<${Loading} />`
+      : html`<table className="tbl">
+        <thead><tr><th>#</th><th>Ad Soyad</th><th>E-posta</th><th>Rol</th><th>Durum</th><th>Kayıt</th></tr></thead>
+        <tbody>${users.map((u) => html`<tr key=${u.id}>
+          <td>${u.id}</td><td>${u.fullName}</td><td>${u.email}</td>
+          <td><span className=${"role role-" + u.role.toLowerCase()}>${u.role}</span></td>
+          <td><span className=${"pill pill-" + u.status.toLowerCase()}>${u.status}</span></td>
+          <td>${date(u.createdAt)}</td>
+        </tr>`)}</tbody></table>`}
+  </div>`;
+}
+
+function AddBankerForm({ notify, onDone }) {
+  const [f, setF] = useState({ fullName: "", email: "", password: "" });
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api.adminAddBanker({ fullName: f.fullName.trim(), email: f.email.trim(), password: f.password });
+      notify("Bankacı eklendi (Firebase hesabı oluşturuldu).", "success");
+      setF({ fullName: "", email: "", password: "" });
+      onDone();
+    } catch (err) { notify(err.friendly, "error"); }
+    finally { setBusy(false); }
+  }
+  return html`<form className="card" onSubmit=${submit}>
+    <h3 style=${{ marginTop: 0 }}>Bankacı ekle</h3>
+    <div className="form-grid">
+      <label>Ad Soyad<input required value=${f.fullName} onChange=${set("fullName")} placeholder="Ayşe Yılmaz" /></label>
+      <label>E-posta<input required type="email" value=${f.email} onChange=${set("email")} placeholder="bankaci@bank.local" /></label>
+      <label>Şifre<input required type="password" minLength=${6} value=${f.password} onChange=${set("password")} placeholder="En az 6 karakter" /></label>
+    </div>
+    <button className="btn primary" disabled=${busy} type="submit">${busy ? "..." : "Bankacı oluştur"}</button>
+  </form>`;
+}
+
+function AdminLogs({ notify }) {
+  const [logs, setLogs] = useState(null);
+  const load = useCallback(async () => {
+    try { setLogs(await api.adminOperations(200)); }
+    catch (e) { notify(e.friendly, "error"); }
+  }, [notify]);
+  useEffect(() => { load(); }, [load]);
+
+  return html`<div>
+    <div className="row-between">
+      <h3 style=${{ margin: 0 }}>İşlem / audit logları ${logs ? html`<span className="muted">(${logs.length})</span>` : ""}</h3>
+      <button className="btn small" onClick=${load}>Yenile</button>
+    </div>
+    ${!logs ? html`<${Loading} />`
+      : logs.length === 0 ? html`<p className="muted">Henüz işlem kaydı yok.</p>`
+      : html`<table className="tbl">
+        <thead><tr><th>#</th><th>Tarih</th><th>İşlem</th><th className="r">Ana hesap</th><th className="r">Karşı hesap</th><th className="r">Tutar</th></tr></thead>
+        <tbody>${logs.map((l) => html`<tr key=${l.id}>
+          <td>${l.id}</td><td>${date(l.createdAt)}</td>
+          <td>${OP_LABELS[l.type] || l.type}</td>
+          <td className="r">#${l.primaryAccountId}</td>
+          <td className="r">${l.counterAccountId != null ? "#" + l.counterAccountId : "—"}</td>
+          <td className="r">${money(l.amount)}</td>
+        </tr>`)}</tbody></table>`}
+  </div>`;
+}
+
+function AdminAccounts({ notify }) {
   const [id, setId] = useState("");
   const [account, setAccount] = useState(null);
 
@@ -472,7 +563,6 @@ function AdminPanel({ notify }) {
   }
 
   return html`<div>
-    <h2>Admin — Hesap yönetimi</h2>
     <form className="row" onSubmit=${lookup}>
       <input type="number" placeholder="Hesap ID" value=${id} onChange=${(e) => setId(e.target.value)} />
       <button className="btn primary" type="submit">Getir</button>
@@ -509,11 +599,11 @@ function statusLabel(s) {
 // ---------- dashboard ----------
 function Dashboard({ profile, notify }) {
   const role = profile.role;
-  const tabs = [];
-  if (role === "BANKER") tabs.push(["banker", "Bankacı"]);
-  if (role === "ADMIN") tabs.push(["admin", "Admin"]);
-  tabs.push(["accounts", "Hesaplarım"]);
-  tabs.push(["credit", "Kredi"]);
+  // Staff (banker/admin) are not customers: they don't see accounts or credit application.
+  const tabs =
+    role === "ADMIN" ? [["admin", "Admin"]]
+      : role === "BANKER" ? [["banker", "Bankacı"]]
+      : [["accounts", "Hesaplarım"], ["credit", "Kredi"]];
   const [tab, setTab] = useState(tabs[0][0]);
 
   return html`<div className="app">

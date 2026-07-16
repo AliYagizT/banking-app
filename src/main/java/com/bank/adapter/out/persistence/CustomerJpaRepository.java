@@ -18,4 +18,6 @@ public interface CustomerJpaRepository extends JpaRepository<Customer, Long> {
 
     @Query("select c.id from Customer c where c.role = :role")
     List<Long> findIdsByRole(@Param("role") CustomerRole role);
+
+    List<Customer> findAllByOrderByIdDesc();
 }

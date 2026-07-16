@@ -18,5 +18,8 @@ public interface CustomerRepository {
     /** Ids of all customers holding the given role (e.g. every BANKER, for assignment). */
     List<Long> findIdsByRole(CustomerRole role);
 
+    /** All customers, newest first (admin user list). */
+    List<Customer> findAllNewestFirst();
+
     Customer save(Customer customer);
 }

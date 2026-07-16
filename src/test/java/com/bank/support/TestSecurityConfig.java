@@ -2,10 +2,12 @@ package com.bank.support;
 
 import com.bank.application.model.VerifiedIdentity;
 import com.bank.application.port.out.TokenVerifier;
+import com.bank.application.port.out.UserProvisioner;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 
 import java.util.Locale;
+import java.util.UUID;
 
 /**
  * Test wiring that replaces the real Firebase token verifier with a fake one, so
@@ -29,5 +31,11 @@ public class TestSecurityConfig {
             String email = token.trim().toLowerCase(Locale.ROOT);
             return new VerifiedIdentity("test-uid:" + email, email);
         };
+    }
+
+    /** Fake identity-provider provisioning: no external call, just returns a synthetic uid. */
+    @Bean
+    public UserProvisioner fakeUserProvisioner() {
+        return (email, password, displayName) -> "test-uid:" + UUID.randomUUID();
     }
 }
