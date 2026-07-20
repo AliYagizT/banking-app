@@ -6,6 +6,7 @@ import com.bank.application.model.Page;
 import com.bank.application.model.PageQuery;
 import com.bank.application.model.TransactionHistoryEntry;
 import com.bank.application.port.in.DepositUseCase;
+import com.bank.application.port.in.DisburseCreditUseCase;
 import com.bank.application.port.in.GetAccountStatementUseCase;
 import com.bank.application.port.in.GetBalanceUseCase;
 import com.bank.application.port.in.TransferUseCase;
@@ -64,7 +65,7 @@ import java.util.function.Supplier;
 @Service
 public class MoneyMovementService
         implements DepositUseCase, WithdrawUseCase, TransferUseCase,
-        GetBalanceUseCase, GetAccountStatementUseCase {
+        DisburseCreditUseCase, GetBalanceUseCase, GetAccountStatementUseCase {
 
     /** Account number of the seeded system account that is the counter-leg for deposits/withdrawals. */
     public static final String EXTERNAL_CASH_ACCOUNT_NUMBER = "EXTERNAL-CASH";
@@ -142,6 +143,19 @@ public class MoneyMovementService
     }
 
     @Override
+    public MoneyMovementResult disburse(Long accountId, BigDecimal amount, String idempotencyKey) {
+        String key = requireKey(idempotencyKey);
+        BigDecimal normalizedAmount = normalizeAmount(amount);
+        String requestHash = RequestHashing.sha256Hex(
+                OperationType.CREDIT_DISBURSEMENT, accountId, normalizedAmount);
+
+        return runWithRetry(key, requestHash, () ->
+                transactionRunner.inNewTransaction(() ->
+                        doCreditFromExternal(accountId, normalizedAmount, key, requestHash,
+                                OperationType.CREDIT_DISBURSEMENT)));
+    }
+
+    @Override
     public BalanceView getBalance(Long accountId) {
         return transactionRunner.inReadOnlyTransaction(() -> {
             Account account = loadCustomerAccount(accountId);
@@ -172,6 +186,16 @@ public class MoneyMovementService
     // ------------------------------------------------------------------
 
     private MoneyMovementResult doDeposit(Long accountId, BigDecimal amount, String key, String requestHash) {
+        return doCreditFromExternal(accountId, amount, key, requestHash, OperationType.DEPOSIT);
+    }
+
+    /**
+     * Credit a customer account from the external cash counter-leg. Shared by deposits
+     * and credit disbursements; the {@code type} distinguishes them in the ledger, the
+     * audit log, and the idempotency record.
+     */
+    private MoneyMovementResult doCreditFromExternal(Long accountId, BigDecimal amount,
+                                                     String key, String requestHash, OperationType type) {
         Optional<MoneyMovementResult> replay = findReplay(key, requestHash);
         if (replay.isPresent()) {
             return replay.get();
@@ -181,14 +205,14 @@ public class MoneyMovementService
         Account external = loadExternalCashAccount();
 
         UUID operationId = UUID.randomUUID();
-        // Deposit: money flows in from outside -> credit the customer, debit external cash.
-        postDoubleEntry(external, customer, amount, operationId, OperationType.DEPOSIT);
-        recordOperation(operationId, OperationType.DEPOSIT, key, customer.getId(), external.getId(), amount);
+        // Money flows in from outside -> credit the customer, debit external cash.
+        postDoubleEntry(external, customer, amount, operationId, type);
+        recordOperation(operationId, type, key, customer.getId(), external.getId(), amount);
 
         MoneyMovementResult result = MoneyMovementResult.singleAccount(
-                operationId, OperationType.DEPOSIT, amount, customerOperationTimestamp(),
+                operationId, type, amount, customerOperationTimestamp(),
                 customer.getId(), customer.getBalance());
-        persistIdempotency(key, OperationType.DEPOSIT, requestHash, operationId, result);
+        persistIdempotency(key, type, requestHash, operationId, result);
         return result;
     }
 

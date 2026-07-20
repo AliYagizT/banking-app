@@ -46,6 +46,12 @@ banking:
     # account. Tune higher for hot single-account contention; see MoneyMovementService.
     max-retries: 20
     backoff-base-millis: 10
+  credit:
+    # Underwriting decision-support thresholds shown to the banker (advisory, not
+    # auto-enforced). Turkish banks cap the monthly installment at half of declared
+    # income; private-sector applicants typically need >=3 months at their current job.
+    max-installment-to-income: 0.50
+    min-employment-months: 3
   security:
     login:
       # Brute-force guard: after this many failed logins from one IP, that IP is

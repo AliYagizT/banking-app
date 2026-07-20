@@ -22,13 +22,16 @@ public class CustomerService implements RegisterCustomerUseCase, GetCustomerUseC
     private final CustomerRepository customerRepository;
     private final PasswordHasher passwordHasher;
     private final TransactionRunner transactionRunner;
+    private final BankerAssignmentService bankerAssignmentService;
 
     public CustomerService(CustomerRepository customerRepository,
                            PasswordHasher passwordHasher,
-                           TransactionRunner transactionRunner) {
+                           TransactionRunner transactionRunner,
+                           BankerAssignmentService bankerAssignmentService) {
         this.customerRepository = customerRepository;
         this.passwordHasher = passwordHasher;
         this.transactionRunner = transactionRunner;
+        this.bankerAssignmentService = bankerAssignmentService;
     }
 
     @Override
@@ -44,7 +47,11 @@ public class CustomerService implements RegisterCustomerUseCase, GetCustomerUseC
             if (customerRepository.existsByEmail(normalizedEmail)) {
                 throw new ValidationException("A customer with email '" + normalizedEmail + "' already exists");
             }
-            return customerRepository.save(new Customer(normalizedName, normalizedEmail, passwordHash));
+            Customer saved = customerRepository.save(new Customer(normalizedName, normalizedEmail, passwordHash));
+            // Give every new customer a relationship banker (random) to own their future
+            // credit applications. Harmless no-op if the bank has no bankers yet.
+            bankerAssignmentService.getOrAssignBanker(saved.getId());
+            return saved;
         });
     }
 
