@@ -18,7 +18,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 import java.util.UUID;
 
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static com.bank.support.TestAuth.bearer;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -49,7 +49,7 @@ class CreditFlowIT extends AbstractIntegrationTest {
 
     private String newCustomer() {
         String email = "cust-" + UUID.randomUUID() + "@example.com";
-        customerService.register("Cust", email, PASSWORD);
+        customerService.register("Cust", email);
         return email;
     }
 
@@ -77,7 +77,7 @@ class CreditFlowIT extends AbstractIntegrationTest {
 
         // 1) Customer submits -> SUBMITTED, routed to an assigned banker.
         String submitResponse = mockMvc.perform(post("/api/credit-applications")
-                        .with(httpBasic(customer, PASSWORD))
+                        .with(bearer(customer))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(submitBody(account.getId())))
                 .andExpect(status().isCreated())
@@ -91,13 +91,13 @@ class CreditFlowIT extends AbstractIntegrationTest {
 
         // 2) The application is in the assigned banker's queue.
         mockMvc.perform(get("/api/banker/credit-applications")
-                        .with(httpBasic(banker, BANKER_PASSWORD)))
+                        .with(bearer(banker)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id == " + applicationId + ")]").exists());
 
         // 3) Banker sees underwriting metrics; all criteria pass for this applicant.
         mockMvc.perform(get("/api/banker/credit-applications/{id}", applicationId)
-                        .with(httpBasic(banker, BANKER_PASSWORD)))
+                        .with(bearer(banker)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.application.id").value((int) applicationId))
                 .andExpect(jsonPath("$.assessment.withinIncomeLimit").value(true))
@@ -105,7 +105,7 @@ class CreditFlowIT extends AbstractIntegrationTest {
 
         // 4) Banker approves -> disbursement.
         mockMvc.perform(post("/api/banker/credit-applications/{id}/approve", applicationId)
-                        .with(httpBasic(banker, BANKER_PASSWORD))
+                        .with(bearer(banker))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"Gelir yeterli\"}"))
                 .andExpect(status().isOk())
@@ -114,20 +114,20 @@ class CreditFlowIT extends AbstractIntegrationTest {
 
         // 5) Money landed in the customer's account.
         mockMvc.perform(get("/api/accounts/{id}/balance", account.getId())
-                        .with(httpBasic(customer, PASSWORD)))
+                        .with(bearer(customer)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.balance").value(60000.00));
 
         // 6) The disbursement shows up in the transaction history.
         mockMvc.perform(get("/api/accounts/{id}/transactions", account.getId())
-                        .with(httpBasic(customer, PASSWORD)))
+                        .with(bearer(customer)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].type").value("CREDIT_DISBURSEMENT"))
                 .andExpect(jsonPath("$.content[0].amount").value(60000.00));
 
         // 7) The customer can see the repayment schedule (12 installments).
         mockMvc.perform(get("/api/credit-applications/{id}/repayment-plan", applicationId)
-                        .with(httpBasic(customer, PASSWORD)))
+                        .with(bearer(customer)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.termMonths").value(12))
                 .andExpect(jsonPath("$.installments.length()").value(12))
@@ -139,7 +139,7 @@ class CreditFlowIT extends AbstractIntegrationTest {
         String owner = newCustomer();
         Account account = accountFor(owner);
         String submitResponse = mockMvc.perform(post("/api/credit-applications")
-                        .with(httpBasic(owner, PASSWORD))
+                        .with(bearer(owner))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(submitBody(account.getId())))
                 .andExpect(status().isCreated())
@@ -148,7 +148,7 @@ class CreditFlowIT extends AbstractIntegrationTest {
 
         String stranger = newCustomer();
         mockMvc.perform(get("/api/credit-applications/{id}", applicationId)
-                        .with(httpBasic(stranger, PASSWORD)))
+                        .with(bearer(stranger)))
                 .andExpect(status().isNotFound());
     }
 
@@ -157,7 +157,7 @@ class CreditFlowIT extends AbstractIntegrationTest {
         String customer = newCustomer();
         Account account = accountFor(customer);
         String submitResponse = mockMvc.perform(post("/api/credit-applications")
-                        .with(httpBasic(customer, PASSWORD))
+                        .with(bearer(customer))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(submitBody(account.getId())))
                 .andExpect(status().isCreated())
@@ -172,11 +172,11 @@ class CreditFlowIT extends AbstractIntegrationTest {
         String otherBanker = bankerEmail(otherBankerId);
 
         mockMvc.perform(get("/api/banker/credit-applications/{id}", applicationId)
-                        .with(httpBasic(otherBanker, BANKER_PASSWORD)))
+                        .with(bearer(otherBanker)))
                 .andExpect(status().isNotFound());
 
         mockMvc.perform(post("/api/banker/credit-applications/{id}/approve", applicationId)
-                        .with(httpBasic(otherBanker, BANKER_PASSWORD))
+                        .with(bearer(otherBanker))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isNotFound());

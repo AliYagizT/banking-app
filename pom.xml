@@ -93,6 +93,14 @@
             <version>2.6.0</version>
         </dependency>
 
+        <!-- Firebase Admin SDK: verifies Firebase ID tokens (Bearer auth) and provisions
+             staff accounts. Requires a service-account credential at runtime. -->
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>9.4.3</version>
+        </dependency>
+
         <!-- ===== Test ===== -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

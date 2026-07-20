@@ -19,7 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static com.bank.support.TestAuth.bearer;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -53,13 +53,13 @@ class RbacIT extends AbstractIntegrationTest {
 
     private String newCustomer() {
         String email = "cust-" + UUID.randomUUID() + "@example.com";
-        customerService.register("Cust", email, PASSWORD);
+        customerService.register("Cust", email);
         return email;
     }
 
     private String newAdmin() {
         String email = "admin-" + UUID.randomUUID() + "@example.com";
-        Customer admin = customerService.register("Admin", email, PASSWORD);
+        Customer admin = customerService.register("Admin", email);
         // Elevate to ADMIN (operationally this is done out-of-band, e.g. by the seeder).
         Customer managed = customerJpaRepository.findById(admin.getId()).orElseThrow();
         managed.setRole(CustomerRole.ADMIN);
@@ -80,7 +80,7 @@ class RbacIT extends AbstractIntegrationTest {
         Account own = accountFor(customer, "10.00");
 
         mockMvc.perform(get("/api/admin/accounts/{id}", own.getId())
-                        .with(httpBasic(customer, PASSWORD)))
+                        .with(bearer(customer)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
@@ -99,7 +99,7 @@ class RbacIT extends AbstractIntegrationTest {
         String admin = newAdmin();
 
         mockMvc.perform(get("/api/admin/accounts/{id}", target.getId())
-                        .with(httpBasic(admin, PASSWORD)))
+                        .with(bearer(admin)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(target.getId().intValue()))
                 .andExpect(jsonPath("$.balance").value(25.00));
@@ -113,13 +113,13 @@ class RbacIT extends AbstractIntegrationTest {
 
         // Admin freezes the account.
         mockMvc.perform(post("/api/admin/accounts/{id}/freeze", target.getId())
-                        .with(httpBasic(admin, PASSWORD)))
+                        .with(bearer(admin)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("FROZEN"));
 
         // The owner can no longer move money on a frozen account.
         mockMvc.perform(post("/api/accounts/{id}/deposits", target.getId())
-                        .with(httpBasic(customer, PASSWORD))
+                        .with(bearer(customer))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(new AmountRequest(new BigDecimal("5.00")))))

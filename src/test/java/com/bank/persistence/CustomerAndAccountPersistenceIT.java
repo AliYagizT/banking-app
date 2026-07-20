@@ -34,7 +34,7 @@ class CustomerAndAccountPersistenceIT extends AbstractIntegrationTest {
 
     @Test
     void createsCustomerAndAccountEndToEnd() {
-        Customer customer = customerService.register("Ada Lovelace", "ada@example.com", "password123");
+        Customer customer = customerService.register("Ada Lovelace", "ada@example.com");
 
         assertThat(customer.getId()).isNotNull();
         assertThat(customer.getCreatedAt()).isNotNull();
@@ -57,16 +57,16 @@ class CustomerAndAccountPersistenceIT extends AbstractIntegrationTest {
 
     @Test
     void rejectsDuplicateEmailCaseInsensitively() {
-        customerService.register("First", "dup@example.com", "password123");
+        customerService.register("First", "dup@example.com");
 
-        assertThatThrownBy(() -> customerService.register("Second", "DUP@example.com", "password123"))
+        assertThatThrownBy(() -> customerService.register("Second", "DUP@example.com"))
                 .isInstanceOf(ValidationException.class)
                 .hasMessageContaining("already exists");
     }
 
     @Test
     void rejectsUnsupportedCurrency() {
-        Customer customer = customerService.register("Euro Fan", "euro@example.com", "password123");
+        Customer customer = customerService.register("Euro Fan", "euro@example.com");
 
         assertThatThrownBy(() -> accountService.openAccount(customer.getId(), "EUR"))
                 .isInstanceOf(ValidationException.class)

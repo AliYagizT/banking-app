@@ -1,8 +1,10 @@
 package com.bank.adapter.out.persistence;
 
 import com.bank.domain.model.OperationLogEntry;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -12,4 +14,6 @@ public interface OperationLogJpaRepository extends JpaRepository<OperationLogEnt
     Optional<OperationLogEntry> findByOperationId(UUID operationId);
 
     long countByPrimaryAccountId(Long primaryAccountId);
+
+    List<OperationLogEntry> findAllByOrderByCreatedAtDescIdDesc(Pageable pageable);
 }

@@ -52,10 +52,21 @@ banking:
     # income; private-sector applicants typically need >=3 months at their current job.
     max-installment-to-income: 0.50
     min-employment-months: 3
+  firebase:
+    # Firebase Admin SDK: verifies Bearer ID tokens and (optionally) provisions staff
+    # accounts. Disable in environments without Firebase (e.g. tests use a fake verifier).
+    enabled: ${FIREBASE_ENABLED:true}
+    # Path to the service-account JSON. Secret — never committed. Falls back to the ambient
+    # GOOGLE_APPLICATION_CREDENTIALS if left blank.
+    credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
+    project-id: ${FIREBASE_PROJECT_ID:banking-softtech}
+    # One-off: create Firebase accounts for DB staff (BANKER/ADMIN) that lack one. Turn on
+    # once (with the password below), then turn back off.
+    seed-staff: ${FIREBASE_SEED_STAFF:false}
+    staff-password: ${FIREBASE_STAFF_PASSWORD:banker123}
   security:
     login:
-      # Brute-force guard: after this many failed logins from one IP, that IP is
-      # blocked for `block-minutes`.
+      # (Legacy) brute-force thresholds; unused since auth moved to Firebase tokens.
       max-attempts: 5
       block-minutes: 15
     cors:

@@ -1,166 +1,108 @@
-// API client: centralizes Basic-auth header, Idempotency-Key handling, and
-// error-code -> friendly message mapping. Works against a real REST API or the
-// in-memory MockServer (same request/response contract).
+// REST client for the Spring backend. Every call carries the Firebase ID token as
+// `Authorization: Bearer <token>`, which the backend verifies. Money movements also carry
+// an `Idempotency-Key` so a retried request never double-charges.
 
-import { MockServer } from './mock-server.js';
+import { API_BASE_URL } from "./config.js";
+import { idToken } from "./firebase.js";
 
-export const ERROR_MESSAGES = {
-  UNAUTHENTICATED: 'Incorrect email or password.',
-  ACCESS_DENIED: "You don't have permission to do that.",
-  TOO_MANY_ATTEMPTS: 'Too many attempts. Please wait a few minutes and try again.',
-  INSUFFICIENT_FUNDS: 'Insufficient funds for this transaction.',
-  VALIDATION_ERROR: 'Please check the details and try again.',
-  NOT_FOUND: "We couldn't find that account.",
-  CONCURRENCY_CONFLICT: 'This account was updated at the same time. Please try again.',
-  ACCOUNT_NOT_ACTIVE: "This account isn't active, so money can't move right now.",
-  NETWORK: "Can't reach the server. Check your connection and try again.",
-  UNKNOWN: 'Something went wrong. Please try again.',
+const ERROR_MESSAGES = {
+  UNAUTHENTICATED: "Oturum gerekli. Lütfen tekrar giriş yapın.",
+  ACCESS_DENIED: "Bu işlem için yetkiniz yok.",
+  NOT_FOUND: "Kayıt bulunamadı.",
+  VALIDATION_ERROR: "Lütfen bilgileri kontrol edin.",
+  INSUFFICIENT_FUNDS: "Yetersiz bakiye.",
+  ACCOUNT_NOT_ACTIVE: "Hesap aktif değil, işlem yapılamaz.",
+  CONCURRENCY_CONFLICT: "Hesap aynı anda güncellendi, tekrar deneyin.",
+  NETWORK: "Sunucuya ulaşılamıyor. Backend çalışıyor mu?",
+  UNKNOWN: "Beklenmeyen bir hata oluştu.",
 };
 
-const STATUS_TO_CODE = { 401: 'UNAUTHENTICATED', 403: 'ACCESS_DENIED', 429: 'TOO_MANY_ATTEMPTS' };
-
 export class ApiError extends Error {
-  constructor(code, message, status, raw) {
+  constructor(code, message, status, fieldErrors) {
     super(message || ERROR_MESSAGES[code] || ERROR_MESSAGES.UNKNOWN);
-    this.code = code || 'UNKNOWN';
+    this.code = code || "UNKNOWN";
     this.status = status;
-    this.raw = raw;
-    this.friendly = message && code === 'VALIDATION_ERROR' ? message
-      : (ERROR_MESSAGES[this.code] || ERROR_MESSAGES.UNKNOWN);
+    this.fieldErrors = fieldErrors || [];
+    this.friendly =
+      (code === "VALIDATION_ERROR" && message) ? message
+        : (ERROR_MESSAGES[this.code] || ERROR_MESSAGES.UNKNOWN);
   }
 }
 
-export const newIdempotencyKey = () =>
+const uuid = () =>
   (crypto.randomUUID ? crypto.randomUUID()
-    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-        const r = (Math.random() * 16) | 0; return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+    : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
       }));
 
-export class ApiClient {
-  constructor({ baseUrl = 'http://localhost:8080', useMock = true } = {}) {
-    this.baseUrl = baseUrl.replace(/\/$/, '');
-    this.useMock = useMock;
-    this.auth = null; // { email, password } kept in memory only
-    this.mock = useMock ? new MockServer() : null;
+async function request(method, path, { body, idempotent } = {}) {
+  const token = await idToken();
+  const headers = { Accept: "application/json" };
+  if (token) headers["Authorization"] = "Bearer " + token;
+  if (body) headers["Content-Type"] = "application/json";
+  if (idempotent) headers["Idempotency-Key"] = uuid();
+
+  let res;
+  try {
+    res = await fetch(API_BASE_URL + path, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (netErr) {
+    throw new ApiError("NETWORK", ERROR_MESSAGES.NETWORK, 0);
   }
 
-  setBaseUrl(url) { this.baseUrl = String(url).replace(/\/$/, ''); }
-  setMode(useMock) {
-    this.useMock = useMock;
-    if (useMock && !this.mock) this.mock = new MockServer();
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (_) {
+    /* empty body (e.g. 201 with no content) */
   }
-  setAuth(email, password) { this.auth = { email, password }; }
-  clearAuth() { this.auth = null; }
-
-  async _send({ method, path, query, body, idempotencyKey, auth }) {
-    const creds = auth === undefined ? this.auth : auth;
-    if (this.useMock) {
-      try {
-        const res = await this.mock.request({ method, path, query, body, auth: creds, idempotencyKey });
-        return res.body;
-      } catch (e) {
-        const code = e.code || STATUS_TO_CODE[e.status] || 'UNKNOWN';
-        throw new ApiError(code, e.message, e.status, e);
-      }
-    }
-    // Real transport
-    let res;
-    try {
-      const qs = query ? '?' + new URLSearchParams(query).toString() : '';
-      const headers = { Accept: 'application/json' };
-      if (creds) headers['Authorization'] = 'Basic ' + btoa(creds.email + ':' + creds.password);
-      if (body) headers['Content-Type'] = 'application/json';
-      if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
-      res = await fetch(this.baseUrl + path + qs, {
-        method, headers, body: body ? JSON.stringify(body) : undefined,
-      });
-    } catch (netErr) {
-      throw new ApiError('NETWORK', ERROR_MESSAGES.NETWORK, 0, netErr);
-    }
-    let data = null;
-    try { data = await res.json(); } catch (_) { /* empty body */ }
-    if (!res.ok) {
-      const code = (data && data.code) || STATUS_TO_CODE[res.status] || 'UNKNOWN';
-      throw new ApiError(code, data && data.message, res.status, data);
-    }
-    return data;
+  if (!res.ok) {
+    const statusCode =
+      res.status === 401 ? "UNAUTHENTICATED" : res.status === 403 ? "ACCESS_DENIED" : null;
+    const code = (data && data.code) || statusCode || "UNKNOWN";
+    throw new ApiError(code, data && data.message, res.status, data && data.fieldErrors);
   }
-
-  // ---------- auth / customer ----------
-  async register({ fullName, email, password }) {
-    return this._send({ method: 'POST', path: '/api/customers', body: { fullName, email, password }, auth: null });
-  }
-  // Resolve identity from Basic creds (validates email+password).
-  async authenticate(email, password) {
-    return this._send({ method: 'GET', path: '/api/customers/me', auth: { email, password } });
-  }
-  getCustomer(id) { return this._send({ method: 'GET', path: `/api/customers/${id}` }); }
-
-  // ---------- accounts ----------
-  async listAccounts() {
-    const data = await this._send({ method: 'GET', path: '/api/accounts' });
-    if (this.useMock) return data;
-    return { content: (data.content || []).map(a => this._account(a)) };
-  }
-  async openAccount(type = 'CHECKING') {
-    const data = await this._send({ method: 'POST', path: '/api/accounts', body: { currency: 'USD', type } });
-    return this.useMock ? data : this._account(data);
-  }
-  async getAccount(id) {
-    const data = await this._send({ method: 'GET', path: `/api/accounts/${id}` });
-    return this.useMock ? data : this._account(data);
-  }
-  getBalance(id) { return this._send({ method: 'GET', path: `/api/accounts/${id}/balance` }); }
-  async getTransactions(id, page = 0, size = 20) {
-    const data = await this._send({ method: 'GET', path: `/api/accounts/${id}/transactions`, query: { page, size } });
-    if (this.useMock) return data;
-    return { ...data, content: (data.content || []).map(e => this._txEntry(e)) };
-  }
-
-  // ---------- money movements (idempotent) ----------
-  async deposit(id, amount, idempotencyKey) {
-    const data = await this._send({ method: 'POST', path: `/api/accounts/${id}/deposits`, body: { amount }, idempotencyKey });
-    return this.useMock ? data : this._movement(data);
-  }
-  async withdraw(id, amount, idempotencyKey) {
-    const data = await this._send({ method: 'POST', path: `/api/accounts/${id}/withdrawals`, body: { amount }, idempotencyKey });
-    return this.useMock ? data : this._movement(data);
-  }
-  async transfer({ sourceAccountId, destinationAccountId, amount }, idempotencyKey) {
-    const data = await this._send({ method: 'POST', path: '/api/transfers', body: { sourceAccountId, destinationAccountId, amount }, idempotencyKey });
-    return this.useMock ? data : this._movement(data);
-  }
-
-  // ---------- admin ----------
-  async adminGetAccount(id) {
-    const data = await this._send({ method: 'GET', path: `/api/admin/accounts/${id}` });
-    return this.useMock ? data : this._account(data);
-  }
-  adminFreeze(id) { return this._send({ method: 'POST', path: `/api/admin/accounts/${id}/freeze` }); }
-  adminClose(id) { return this._send({ method: 'POST', path: `/api/admin/accounts/${id}/close` }); }
-
-  // ---------- response adapters (real backend JSON -> UI shape) ----------
-  // The real API has no product-level account type (its AccountType is CUSTOMER/SYSTEM)
-  // and serves money as JSON numbers; these map its field names onto what the UI
-  // (and the mock) already consume. Only used when talking to the real backend.
-  _account(a) {
-    return {
-      id: a.id, accountNumber: a.accountNumber, type: a.type || 'CHECKING',
-      currency: a.currency, status: a.status, balance: a.balance,
-      ownerId: a.customerId, ownerName: a.ownerName, ownerEmail: a.ownerEmail,
-    };
-  }
-  _txEntry(e) {
-    const credit = e.direction === 'CREDIT';
-    const label = { DEPOSIT: 'Deposit', WITHDRAWAL: 'Withdrawal',
-      TRANSFER: credit ? 'Transfer received' : 'Transfer sent' }[e.type];
-    return {
-      id: e.entryId, direction: e.direction, amount: e.amount,
-      balanceAfter: e.balanceAfter, createdAt: e.timestamp,
-      description: label || (credit ? 'Credit' : 'Debit'),
-    };
-  }
-  _movement(m) {
-    return { accountId: m.primaryAccountId, balance: m.primaryBalance, replayed: !!m.replayed };
-  }
+  return data;
 }
+
+export const api = {
+  // ---- customer profile ----
+  registerProfile: (fullName) => request("POST", "/api/customers", { body: { fullName } }),
+  me: () => request("GET", "/api/customers/me"),
+
+  // ---- accounts ----
+  listAccounts: () => request("GET", "/api/accounts"),
+  openAccount: (currency = "USD") => request("POST", "/api/accounts", { body: { currency } }),
+  getBalance: (id) => request("GET", `/api/accounts/${id}/balance`),
+  getTransactions: (id, page = 0, size = 20) =>
+    request("GET", `/api/accounts/${id}/transactions?page=${page}&size=${size}`),
+  deposit: (id, amount) => request("POST", `/api/accounts/${id}/deposits`, { body: { amount }, idempotent: true }),
+  withdraw: (id, amount) => request("POST", `/api/accounts/${id}/withdrawals`, { body: { amount }, idempotent: true }),
+  transfer: (sourceAccountId, destinationAccountId, amount) =>
+    request("POST", "/api/transfers", { body: { sourceAccountId, destinationAccountId, amount }, idempotent: true }),
+
+  // ---- credit (customer) ----
+  listProducts: () => request("GET", "/api/credit-products"),
+  submitApplication: (payload) => request("POST", "/api/credit-applications", { body: payload }),
+  listApplications: () => request("GET", "/api/credit-applications"),
+  getApplication: (id) => request("GET", `/api/credit-applications/${id}`),
+  getRepaymentPlan: (id) => request("GET", `/api/credit-applications/${id}/repayment-plan`),
+
+  // ---- credit (banker) ----
+  bankerQueue: () => request("GET", "/api/banker/credit-applications"),
+  bankerDetail: (id) => request("GET", `/api/banker/credit-applications/${id}`),
+  bankerApprove: (id, reason) => request("POST", `/api/banker/credit-applications/${id}/approve`, { body: { reason } }),
+  bankerReject: (id, reason) => request("POST", `/api/banker/credit-applications/${id}/reject`, { body: { reason } }),
+
+  // ---- admin ----
+  adminGetAccount: (id) => request("GET", `/api/admin/accounts/${id}`),
+  adminFreeze: (id) => request("POST", `/api/admin/accounts/${id}/freeze`),
+  adminClose: (id) => request("POST", `/api/admin/accounts/${id}/close`),
+  adminUsers: () => request("GET", "/api/admin/users"),
+  adminAddBanker: (payload) => request("POST", "/api/admin/bankers", { body: payload }),
+  adminOperations: (limit = 100) => request("GET", `/api/admin/operations?limit=${limit}`),
+};

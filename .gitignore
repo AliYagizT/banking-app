@@ -38,6 +38,11 @@ desktop.ini
 application-local.properties
 application-local.yml
 
+# ---- Firebase service-account credentials (NEVER commit) ----
+*firebase-adminsdk*.json
+firebase-service-account.json
+google-credentials.json
+
 # ---- Node (frontend, ileride eklenirse) ----
 node_modules/
 dist/

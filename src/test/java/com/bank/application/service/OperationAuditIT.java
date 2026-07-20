@@ -34,7 +34,7 @@ class OperationAuditIT extends AbstractIntegrationTest {
 
     private Account newAccount() {
         var customer = customerService.register(
-                "Audit User", "audit-" + UUID.randomUUID() + "@example.com", "password123");
+                "Audit User", "audit-" + UUID.randomUUID() + "@example.com");
         return accountService.openAccount(customer.getId(), "USD");
     }
 

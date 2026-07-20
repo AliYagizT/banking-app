@@ -5,6 +5,9 @@ banking:
   optimistic-lock:
     max-retries: 100
     backoff-base-millis: 5
+  firebase:
+    # Tests use a fake TokenVerifier; never initialise the real Firebase Admin SDK.
+    enabled: false
   security:
     login:
       # Low threshold so the brute-force test is quick; long block so it stays blocked.

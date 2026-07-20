@@ -3,70 +3,64 @@ package com.bank.infrastructure.security;
 import com.bank.domain.model.Customer;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
 import java.util.List;
 
 /**
- * The authenticated customer, exposed as the Spring Security principal. Carries the
- * customer's id so controllers can authorize access to accounts without an extra
- * database lookup (see {@code @AuthenticationPrincipal CustomerPrincipal}).
+ * The authenticated caller, resolved from a verified bearer token and (usually) a matching
+ * customer row. Exposed as the Spring Security principal so controllers can read the
+ * caller's id/email/role via {@code @AuthenticationPrincipal CustomerPrincipal}.
+ *
+ * <p>A caller who has a valid token but no customer row yet is a <b>prospect</b>
+ * ({@link #getCustomerId()} is {@code null}, role is {@code null}); they are granted only
+ * {@code ROLE_PROSPECT}, which authorizes just the registration endpoint that creates
+ * their profile.
  */
-public class CustomerPrincipal implements UserDetails {
+public class CustomerPrincipal {
 
-    private final Long customerId;
+    private static final String PROSPECT_ROLE = "PROSPECT";
+
+    private final Long customerId; // null for a not-yet-registered (prospect) caller
     private final String email;
-    private final String passwordHash;
-    private final boolean active;
-    private final String role;
+    private final String role;     // null for a prospect
 
-    public CustomerPrincipal(Customer customer) {
-        this.customerId = customer.getId();
-        this.email = customer.getEmail();
-        this.passwordHash = customer.getPasswordHash();
-        this.active = customer.isActive();
-        this.role = customer.getRole().name();
+    private CustomerPrincipal(Long customerId, String email, String role) {
+        this.customerId = customerId;
+        this.email = email;
+        this.role = role;
+    }
+
+    /** Principal for a registered customer (carries id + role from the database). */
+    public static CustomerPrincipal of(Customer customer) {
+        return new CustomerPrincipal(customer.getId(), customer.getEmail(), customer.getRole().name());
+    }
+
+    /** Principal for a verified caller with no customer row yet (may only register). */
+    public static CustomerPrincipal prospect(String email) {
+        return new CustomerPrincipal(null, email, null);
     }
 
     public Long getCustomerId() {
         return customerId;
     }
 
-    @Override
-    public Collection<? extends GrantedAuthority> getAuthorities() {
-        // Spring Security's hasRole("ADMIN") checks for the "ROLE_ADMIN" authority.
-        return List.of(new SimpleGrantedAuthority("ROLE_" + role));
-    }
-
-    @Override
-    public String getPassword() {
-        return passwordHash;
-    }
-
-    @Override
-    public String getUsername() {
+    public String getEmail() {
         return email;
     }
 
-    @Override
-    public boolean isAccountNonExpired() {
-        return true;
+    /** The customer's role name (CUSTOMER/BANKER/ADMIN), or {@code null} for a prospect. */
+    public String getRole() {
+        return role;
     }
 
-    @Override
-    public boolean isAccountNonLocked() {
-        return true;
+    public boolean isRegistered() {
+        return customerId != null;
     }
 
-    @Override
-    public boolean isCredentialsNonExpired() {
-        return true;
-    }
-
-    @Override
-    public boolean isEnabled() {
-        // A closed customer cannot authenticate.
-        return active;
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        // Spring Security's hasRole("X") checks for the "ROLE_X" authority.
+        String granted = role != null ? role : PROSPECT_ROLE;
+        return List.of(new SimpleGrantedAuthority("ROLE_" + granted));
     }
 }

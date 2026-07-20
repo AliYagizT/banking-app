@@ -21,7 +21,7 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasSize;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static com.bank.support.TestAuth.bearer;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -57,7 +57,7 @@ class BankingApiIT extends AbstractIntegrationTest {
 
     private OwnedAccount newAccount() {
         String email = "api-" + UUID.randomUUID() + "@example.com";
-        Customer customer = customerService.register("API User", email, PASSWORD);
+        Customer customer = customerService.register("API User", email);
         Account account = accountService.openAccount(customer.getId(), "USD");
         return new OwnedAccount(account, email);
     }
@@ -73,10 +73,11 @@ class BankingApiIT extends AbstractIntegrationTest {
     @Test
     void registerCustomerThenFetchItWhenAuthenticated() throws Exception {
         String email = "create-" + UUID.randomUUID() + "@example.com";
-        String body = json(new CreateCustomerRequest("Grace Hopper", email, PASSWORD));
+        String body = json(new CreateCustomerRequest("Grace Hopper"));
 
-        // Registration is public.
+        // Registration requires a verified token; the email comes from the token, not the body.
         String location = mockMvc.perform(post("/api/customers")
+                        .with(bearer(email))
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())
                 .andExpect(header().exists("Location"))
@@ -85,33 +86,35 @@ class BankingApiIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
                 .andReturn().getResponse().getHeader("Location");
 
-        // Fetching the record requires the customer's own credentials.
-        mockMvc.perform(get(location).with(httpBasic(email, PASSWORD)))
+        // Fetching the record requires the customer's own token.
+        mockMvc.perform(get(location).with(bearer(email)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fullName").value("Grace Hopper"));
     }
 
     @Test
     void registerCustomerWithInvalidBodyReturns400WithFieldErrors() throws Exception {
-        // Valid password so only the two intended fields fail validation.
-        String body = json(new CreateCustomerRequest("", "not-an-email", PASSWORD));
+        String email = "invalid-" + UUID.randomUUID() + "@example.com";
+        // Blank full name is the only invalid field now (email comes from the token).
+        String body = json(new CreateCustomerRequest(""));
 
         mockMvc.perform(post("/api/customers")
+                        .with(bearer(email))
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.fieldErrors").isArray())
-                .andExpect(jsonPath("$.fieldErrors", hasSize(2)));
+                .andExpect(jsonPath("$.fieldErrors", hasSize(1)));
     }
 
     @Test
     void openAccountForAuthenticatedCustomerReturns201() throws Exception {
         String email = "owner-" + UUID.randomUUID() + "@example.com";
-        Customer customer = customerService.register("Acct Owner", email, PASSWORD);
+        Customer customer = customerService.register("Acct Owner", email);
         String body = json(new OpenAccountRequest("USD"));
 
         mockMvc.perform(post("/api/accounts")
-                        .with(httpBasic(email, PASSWORD))
+                        .with(bearer(email))
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.accountNumber").isString())
@@ -126,7 +129,7 @@ class BankingApiIT extends AbstractIntegrationTest {
         OwnedAccount owned = newAccount();
 
         mockMvc.perform(post("/api/accounts/{id}/deposits", owned.id())
-                        .with(httpBasic(owned.email(), PASSWORD))
+                        .with(bearer(owned.email()))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(new AmountRequest(new BigDecimal("150.00")))))
@@ -136,7 +139,7 @@ class BankingApiIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.replayed").value(false));
 
         mockMvc.perform(get("/api/accounts/{id}/balance", owned.id())
-                        .with(httpBasic(owned.email(), PASSWORD)))
+                        .with(bearer(owned.email())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.balance").value(150.00));
     }
@@ -146,7 +149,7 @@ class BankingApiIT extends AbstractIntegrationTest {
         OwnedAccount owned = newAccount();
 
         mockMvc.perform(post("/api/accounts/{id}/deposits", owned.id())
-                        .with(httpBasic(owned.email(), PASSWORD))
+                        .with(bearer(owned.email()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(new AmountRequest(new BigDecimal("10.00")))))
                 .andExpect(status().isBadRequest())
@@ -160,19 +163,19 @@ class BankingApiIT extends AbstractIntegrationTest {
         String body = json(new AmountRequest(new BigDecimal("40.00")));
 
         mockMvc.perform(post("/api/accounts/{id}/deposits", owned.id())
-                        .with(httpBasic(owned.email(), PASSWORD))
+                        .with(bearer(owned.email()))
                         .header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.replayed").value(false));
 
         mockMvc.perform(post("/api/accounts/{id}/deposits", owned.id())
-                        .with(httpBasic(owned.email(), PASSWORD))
+                        .with(bearer(owned.email()))
                         .header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.replayed").value(true));
 
         mockMvc.perform(get("/api/accounts/{id}/balance", owned.id())
-                        .with(httpBasic(owned.email(), PASSWORD)))
+                        .with(bearer(owned.email())))
                 .andExpect(jsonPath("$.balance").value(40.00));
     }
 
@@ -181,7 +184,7 @@ class BankingApiIT extends AbstractIntegrationTest {
         OwnedAccount owned = newFundedAccount("20.00");
 
         mockMvc.perform(post("/api/accounts/{id}/withdrawals", owned.id())
-                        .with(httpBasic(owned.email(), PASSWORD))
+                        .with(bearer(owned.email()))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(new AmountRequest(new BigDecimal("50.00")))))
@@ -195,7 +198,7 @@ class BankingApiIT extends AbstractIntegrationTest {
 
         // The account doesn't exist; the owner is authenticated but the guard hides it as 404.
         mockMvc.perform(post("/api/accounts/{id}/deposits", 999_999_999L)
-                        .with(httpBasic(owned.email(), PASSWORD))
+                        .with(bearer(owned.email()))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(new AmountRequest(new BigDecimal("10.00")))))
@@ -208,7 +211,7 @@ class BankingApiIT extends AbstractIntegrationTest {
         OwnedAccount owned = newAccount();
 
         mockMvc.perform(post("/api/accounts/{id}/deposits", owned.id())
-                        .with(httpBasic(owned.email(), PASSWORD))
+                        .with(bearer(owned.email()))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(new AmountRequest(new BigDecimal("-5.00")))))
@@ -224,7 +227,7 @@ class BankingApiIT extends AbstractIntegrationTest {
         OwnedAccount destination = newAccount();
 
         mockMvc.perform(post("/api/transfers")
-                        .with(httpBasic(source.email(), PASSWORD))
+                        .with(bearer(source.email()))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(new TransferRequest(source.id(), destination.id(), new BigDecimal("30.00")))))
@@ -241,7 +244,7 @@ class BankingApiIT extends AbstractIntegrationTest {
         OwnedAccount owned = newFundedAccount("100.00");
 
         mockMvc.perform(post("/api/transfers")
-                        .with(httpBasic(owned.email(), PASSWORD))
+                        .with(bearer(owned.email()))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(new TransferRequest(owned.id(), owned.id(), new BigDecimal("10.00")))))
@@ -269,7 +272,7 @@ class BankingApiIT extends AbstractIntegrationTest {
         moneyMovementService.withdraw(owned.id(), new BigDecimal("4.00"), UUID.randomUUID().toString());
 
         mockMvc.perform(get("/api/accounts/{id}/transactions", owned.id())
-                        .with(httpBasic(owned.email(), PASSWORD)))
+                        .with(bearer(owned.email())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(2))
                 .andExpect(jsonPath("$.content", hasSize(2)))
@@ -289,7 +292,7 @@ class BankingApiIT extends AbstractIntegrationTest {
         // First page of 2 of 5: not the last page, exactly 2 items.
         mockMvc.perform(get("/api/accounts/{id}/transactions", owned.id())
                         .param("page", "0").param("size", "2")
-                        .with(httpBasic(owned.email(), PASSWORD)))
+                        .with(bearer(owned.email())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(5))
                 .andExpect(jsonPath("$.totalPages").value(3))
@@ -302,7 +305,7 @@ class BankingApiIT extends AbstractIntegrationTest {
         // Last page holds the remaining single entry.
         mockMvc.perform(get("/api/accounts/{id}/transactions", owned.id())
                         .param("page", "2").param("size", "2")
-                        .with(httpBasic(owned.email(), PASSWORD)))
+                        .with(bearer(owned.email())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.last").value(true))
                 .andExpect(jsonPath("$.content", hasSize(1)));

@@ -39,6 +39,11 @@ public class CustomerRepositoryAdapter implements CustomerRepository {
     }
 
     @Override
+    public List<Customer> findAllNewestFirst() {
+        return jpa.findAllByOrderByIdDesc();
+    }
+
+    @Override
     public Customer save(Customer customer) {
         return jpa.save(customer);
     }
